@@ -114,7 +114,7 @@ final class MazeViewModel {
 
         for await event in Solver().solve(maze) {
             if Task.isCancelled { break }
-            try? await Task.sleep(nanoseconds: 30_000_000)   // 30ms / cell
+            await delayPerCell()
             switch event {
             case .visited(let c):
                 solutionPath.append(c)

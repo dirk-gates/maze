@@ -55,20 +55,21 @@ struct IconGenerator {
         }
 
         // ---- geometry ----
-        // No bezel; iOS / macOS apply their own rounded-corner mask.
+        // Fit to WIDTH, let the height bleed off top and bottom. The
+        // system mask rounds the corners, so the maze appearing to
+        // "extend past the bezel" is intentional.
         // 1:5 wall-to-cell ratio.
 
         let canvas : CGFloat = CGFloat(canvasSize)
         let unitsX = CGFloat(mw * 5 + (mw + 1))
-        let unitsY = CGFloat(mh * 5 + (mh + 1))
-        let unit   = min(canvas / unitsX, canvas / unitsY)
+        let unit   = canvas / unitsX
         let cs     = unit * 5
-        let ws     = max(1, unit * 1)        // never sub-pixel
+        let ws     = unit * 1
         let stride = cs + ws
-        let mazeW  = CGFloat(mw) * cs + CGFloat(mw + 1) * ws
+        let mazeW  = canvas
         let mazeH  = CGFloat(mh) * cs + CGFloat(mh + 1) * ws
-        let ox     = (canvas - mazeW) / 2
-        let oy     = (canvas - mazeH) / 2
+        let ox     : CGFloat = 0
+        let oy     = (canvas - mazeH) / 2     // negative -- maze taller than canvas
 
         // ---- context ----
 
