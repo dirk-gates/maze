@@ -64,6 +64,12 @@ struct ControlsView: View {
         }
         .buttonStyle(.bordered)
         .disabled(viewModel.maze == nil || viewModel.isGenerating || viewModel.isSolving)
+
+        if viewModel.isGenerating || viewModel.isSolving {
+            ProgressView()
+                .controlSize(.small)
+                .tint(.accentColor)
+        }
     }
 
     private var speedControl: some View {

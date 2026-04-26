@@ -9,10 +9,9 @@ import MazeKit
 
 struct MazeCanvasView: View {
     @Bindable var viewModel: MazeViewModel
-    @Environment(\.colorScheme) private var colorScheme
+    let theme: Theme
 
     var body: some View {
-        let theme = Theme.classic(colorScheme)
         Canvas { context, size in
             draw(context: context, size: size, theme: theme)
         }

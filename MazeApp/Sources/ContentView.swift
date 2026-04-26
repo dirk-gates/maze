@@ -6,7 +6,25 @@ import SwiftUI
 struct ContentView: View {
     @State private var viewModel       = MazeViewModel()
     @State private var showingSettings = false
-    @Environment(\.colorScheme) private var colorScheme
+    @Environment(\.colorScheme) private var systemScheme
+
+    /// Color scheme actually used for rendering, accounting for the
+    /// user's appearance preference. Computed once per render pass
+    /// and passed down to children that care -- avoids the
+    /// `preferredColorScheme` / `@Environment(\.colorScheme)` quirk
+    /// where a sibling view reads the system value while the chrome
+    /// is overridden.
+    private var effectiveScheme: ColorScheme {
+        switch viewModel.appearance {
+        case .system: return systemScheme
+        case .light : return .light
+        case .dark  : return .dark
+        }
+    }
+
+    private var theme: Theme {
+        Theme.classic(effectiveScheme)
+    }
 
     private var schemeOverride: ColorScheme? {
         switch viewModel.appearance {
@@ -18,7 +36,7 @@ struct ContentView: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            MazeCanvasView(viewModel: viewModel)
+            MazeCanvasView(viewModel: viewModel, theme: theme)
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
 
             Divider()
@@ -26,7 +44,7 @@ struct ContentView: View {
             ControlsView(viewModel: viewModel, showingSettings: $showingSettings)
         }
         .preferredColorScheme(schemeOverride)
-        .background(Theme.classic(colorScheme).background)
+        .background(theme.background)
         #if os(iOS)
         .ignoresSafeArea(.container, edges: .horizontal)
         #endif
