@@ -8,6 +8,14 @@ struct ContentView: View {
     @State private var showingSettings = false
     @Environment(\.colorScheme) private var colorScheme
 
+    private var schemeOverride: ColorScheme? {
+        switch viewModel.appearance {
+        case .system: return nil
+        case .light : return .light
+        case .dark  : return .dark
+        }
+    }
+
     var body: some View {
         VStack(spacing: 0) {
             MazeCanvasView(viewModel: viewModel)
@@ -17,6 +25,7 @@ struct ContentView: View {
 
             ControlsView(viewModel: viewModel, showingSettings: $showingSettings)
         }
+        .preferredColorScheme(schemeOverride)
         .background(Theme.classic(colorScheme).background)
         #if os(iOS)
         .ignoresSafeArea(.container, edges: .horizontal)

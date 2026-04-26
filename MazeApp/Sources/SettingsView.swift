@@ -15,12 +15,14 @@ struct SettingsView: View {
     @State private var width         : Int
     @State private var height        : Int
     @State private var lookAheadDepth: Int
+    @State private var appearance    : AppearancePreference
 
     init(viewModel: MazeViewModel) {
         self.viewModel = viewModel
         self._width          = State(initialValue: viewModel.width)
         self._height         = State(initialValue: viewModel.height)
         self._lookAheadDepth = State(initialValue: viewModel.lookAheadDepth)
+        self._appearance     = State(initialValue: viewModel.appearance)
     }
 
     var body: some View {
@@ -46,6 +48,14 @@ struct SettingsView: View {
                     Text("Higher values produce harder mazes (longer corridors, fewer dead ends) but slow generation.")
                         .font(.footnote)
                 }
+                Section("Appearance") {
+                    Picker("Appearance", selection: $appearance) {
+                        ForEach(AppearancePreference.allCases) { pref in
+                            Text(pref.displayName).tag(pref)
+                        }
+                    }
+                    .pickerStyle(.segmented)
+                }
             }
             .formStyle(.grouped)
             .navigationTitle("Settings")
@@ -61,6 +71,7 @@ struct SettingsView: View {
                         viewModel.width          = width
                         viewModel.height         = height
                         viewModel.lookAheadDepth = lookAheadDepth
+                        viewModel.appearance     = appearance
                         viewModel.generate()
                         dismiss()
                     }

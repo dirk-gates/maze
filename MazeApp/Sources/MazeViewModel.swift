@@ -6,6 +6,18 @@ import Foundation
 import MazeKit
 import Observation
 
+enum AppearancePreference: String, CaseIterable, Identifiable, Sendable {
+    case system, light, dark
+    var id: String { rawValue }
+    var displayName: String {
+        switch self {
+        case .system: return "System"
+        case .light : return "Light"
+        case .dark  : return "Dark"
+        }
+    }
+}
+
 @MainActor
 @Observable
 final class MazeViewModel {
@@ -15,6 +27,7 @@ final class MazeViewModel {
     var lookAheadDepth: Int     = 0
     var seed          : UInt64? = nil
     var animationSpeed: Double  = 0.65   // 0 = slow, 1 = instant
+    var appearance    : AppearancePreference = .system
 
     // ----- runtime state observed by the views -----
     var maze         : Maze?      = nil

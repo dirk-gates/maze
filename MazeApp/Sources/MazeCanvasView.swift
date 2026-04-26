@@ -68,32 +68,27 @@ struct MazeCanvasView: View {
             }
         }
 
-        let carvedShade = GraphicsContext.Shading.color(theme.carved)
-
-        // -------- carved cells --------
+        // Build a single Path containing every carved region (cells,
+        // open walls, gates) and fill it once. Filling each rect
+        // separately produces faint anti-aliasing seams at adjacent
+        // boundaries; a single path treats them as one shape.
+        var carvedPath = Path()
         for c in viewModel.carvedCells {
-            context.fill(Path(cellRect(c)), with: carvedShade)
+            carvedPath.addRect(cellRect(c))
         }
-
-        // -------- open wall slots --------
         for edge in viewModel.openWalls {
-            context.fill(Path(wallRect(edge)), with: carvedShade)
+            carvedPath.addRect(wallRect(edge))
         }
-
-        // -------- entrance / exit gates in the border --------
         if let entrance = viewModel.entranceGate, entrance.x >= 0, entrance.x < w {
             let x = ox + ws + CGFloat(entrance.x) * stride
-            context.fill(
-                Path(CGRect(x: x, y: oy, width: cs, height: ws)),
-                with: carvedShade)
+            carvedPath.addRect(CGRect(x: x, y: oy, width: cs, height: ws))
         }
         if let exit = viewModel.exitGate, exit.x >= 0, exit.x < w {
             let x = ox + ws + CGFloat(exit.x) * stride
             let y = oy + mazeH - ws
-            context.fill(
-                Path(CGRect(x: x, y: y, width: cs, height: ws)),
-                with: carvedShade)
+            carvedPath.addRect(CGRect(x: x, y: y, width: cs, height: ws))
         }
+        context.fill(carvedPath, with: .color(theme.carved))
 
         // -------- solution path (themed stroke through cell centers) --------
         let cellsDrawn = min(viewModel.solveProgress, viewModel.solutionPath.count)
