@@ -4,8 +4,9 @@
 import SwiftUI
 
 struct ContentView: View {
-    @State private var viewModel       = MazeViewModel()
-    @State private var showingSettings = false
+    @State private var viewModel        = MazeViewModel()
+    @State private var showingSettings  = false
+    @State private var didInitialLaunch = false
     @Environment(\.colorScheme) private var systemScheme
 
     /// Color scheme actually used for rendering, accounting for the
@@ -62,9 +63,25 @@ struct ContentView: View {
         .ignoresSafeArea(.container, edges: .horizontal)
         #endif
         .sheet(isPresented: $showingSettings) {
-            SettingsView(viewModel: viewModel)
+            // Same conditional-preferredColorScheme dance as the root.
+            // The sheet is its own view hierarchy, so the modifier on
+            // mainContent does not propagate in -- we have to apply it
+            // (and release it) on the sheet content directly, or going
+            // back to System leaves the sheet stuck in the prior scheme.
+            if let scheme = schemeOverride {
+                SettingsView(viewModel: viewModel)
+                    .preferredColorScheme(scheme)
+            } else {
+                SettingsView(viewModel: viewModel)
+            }
         }
         .onAppear {
+            // Gate to the first-ever appearance. On iOS, dismissing
+            // the Settings sheet re-fires .onAppear on the host view,
+            // and we don't want that to auto-regenerate -- the user
+            // should have to press Generate explicitly.
+            guard !didInitialLaunch else { return }
+            didInitialLaunch = true
             // iPhone-friendly default size; macOS uses larger via .frame.
             #if os(iOS)
             viewModel.width  = 20
