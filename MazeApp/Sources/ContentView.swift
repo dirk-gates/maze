@@ -16,8 +16,24 @@ struct ContentView: View {
             ControlsView(viewModel: viewModel)
         }
         .background(Color.black)
+        #if os(iOS)
+        .ignoresSafeArea(.container, edges: .horizontal)
+        #endif
         .onAppear {
+            // iPhone-friendly default size; macOS uses larger via .frame.
+            #if os(iOS)
+            viewModel.width  = 20
+            viewModel.height = 30
+            #endif
             viewModel.generate()
         }
+        #if os(macOS)
+        .onReceive(NotificationCenter.default.publisher(for: .mazeGenerate)) { _ in
+            viewModel.generate()
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .mazeSolve)) { _ in
+            viewModel.solve()
+        }
+        #endif
     }
 }

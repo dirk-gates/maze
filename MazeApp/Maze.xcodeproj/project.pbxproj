@@ -7,8 +7,16 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		0C8C23CB956A7348211F05D6 /* MazeIOSInfo.plist in Resources */ = {isa = PBXBuildFile; fileRef = A1A25A18D1719A534A4B32BF /* MazeIOSInfo.plist */; };
+		283CB5C325A1378A7CEBF357 /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5FAE2DBE3D925890761E18EB /* ContentView.swift */; };
+		2C7C6D0C1A0FC3AB532F248C /* MazeApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 176C90ADADDE3F85A9703573 /* MazeApp.swift */; };
+		333910A0C2D5387BA96C3BAA /* MazeViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = B34A95A3838C50BEF62F38BB /* MazeViewModel.swift */; };
+		574B0B6A85E27D269DA48A7F /* MazeKit in Frameworks */ = {isa = PBXBuildFile; productRef = 22479930A1FC57429B130F71 /* MazeKit */; };
+		7A3CE2B704580455C9EE9DFE /* MazeCanvasView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8DFC2C09CEDADDA5C197B104 /* MazeCanvasView.swift */; };
 		822C3DC243F11D0C66DDD8CA /* MazeKit in Frameworks */ = {isa = PBXBuildFile; productRef = 6EE3F2CF76E80E9BF5280643 /* MazeKit */; };
 		9615881DD8CB1299FE58EB57 /* MazeViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = B34A95A3838C50BEF62F38BB /* MazeViewModel.swift */; };
+		A895B8B4C4A4D3C65F9A4F0C /* ControlsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = CB377560EE925ED1788C3802 /* ControlsView.swift */; };
+		A9E453AEBE25940916600F64 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 5A3C0ECBD3C1E4394ADE4D54 /* Assets.xcassets */; };
 		B5BAB0AE8AD44611DB0CEA84 /* MazeCanvasView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8DFC2C09CEDADDA5C197B104 /* MazeCanvasView.swift */; };
 		C5F4D4EEF5194D239D6F04C9 /* ControlsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = CB377560EE925ED1788C3802 /* ControlsView.swift */; };
 		D5A7D929D68D090037F71D6E /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5FAE2DBE3D925890761E18EB /* ContentView.swift */; };
@@ -21,13 +29,23 @@
 		176C90ADADDE3F85A9703573 /* MazeApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MazeApp.swift; sourceTree = "<group>"; };
 		5A3C0ECBD3C1E4394ADE4D54 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		5FAE2DBE3D925890761E18EB /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
+		6C59E9A4B8A3B61392A1041A /* MazeIOS.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = MazeIOS.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		8DFC2C09CEDADDA5C197B104 /* MazeCanvasView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MazeCanvasView.swift; sourceTree = "<group>"; };
+		A1A25A18D1719A534A4B32BF /* MazeIOSInfo.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = MazeIOSInfo.plist; sourceTree = "<group>"; };
 		B34A95A3838C50BEF62F38BB /* MazeViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MazeViewModel.swift; sourceTree = "<group>"; };
 		BA25421C2445ADAABEF14271 /* Maze.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Maze.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		CB377560EE925ED1788C3802 /* ControlsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ControlsView.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
+		57709487BECD20804909F817 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				574B0B6A85E27D269DA48A7F /* MazeKit in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 		76658D9851CD09E3DA4AC63F /* Frameworks */ = {
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
@@ -47,6 +65,7 @@
 				CB377560EE925ED1788C3802 /* ControlsView.swift */,
 				176C90ADADDE3F85A9703573 /* MazeApp.swift */,
 				8DFC2C09CEDADDA5C197B104 /* MazeCanvasView.swift */,
+				A1A25A18D1719A534A4B32BF /* MazeIOSInfo.plist */,
 				B34A95A3838C50BEF62F38BB /* MazeViewModel.swift */,
 			);
 			path = Sources;
@@ -65,6 +84,7 @@
 			isa = PBXGroup;
 			children = (
 				BA25421C2445ADAABEF14271 /* Maze.app */,
+				6C59E9A4B8A3B61392A1041A /* MazeIOS.app */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -100,6 +120,26 @@
 			productReference = BA25421C2445ADAABEF14271 /* Maze.app */;
 			productType = "com.apple.product-type.application";
 		};
+		EEA20B823D1434607516690A /* MazeIOS */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = C87F523EDA46CEC2107F2BD4 /* Build configuration list for PBXNativeTarget "MazeIOS" */;
+			buildPhases = (
+				C33954D8F6851323FE563557 /* Sources */,
+				962200050E395ECAFBBD86C6 /* Resources */,
+				57709487BECD20804909F817 /* Frameworks */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = MazeIOS;
+			packageProductDependencies = (
+				22479930A1FC57429B130F71 /* MazeKit */,
+			);
+			productName = MazeIOS;
+			productReference = 6C59E9A4B8A3B61392A1041A /* MazeIOS.app */;
+			productType = "com.apple.product-type.application";
+		};
 /* End PBXNativeTarget section */
 
 /* Begin PBXProject section */
@@ -110,6 +150,10 @@
 				LastUpgradeCheck = 1430;
 				TargetAttributes = {
 					232EACEE7545D1311D03D395 = {
+						DevelopmentTeam = "";
+						ProvisioningStyle = Automatic;
+					};
+					EEA20B823D1434607516690A = {
 						DevelopmentTeam = "";
 						ProvisioningStyle = Automatic;
 					};
@@ -133,16 +177,26 @@
 			projectRoot = "";
 			targets = (
 				232EACEE7545D1311D03D395 /* Maze */,
+				EEA20B823D1434607516690A /* MazeIOS */,
 			);
 		};
 /* End PBXProject section */
 
 /* Begin PBXResourcesBuildPhase section */
+		962200050E395ECAFBBD86C6 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				A9E453AEBE25940916600F64 /* Assets.xcassets in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 		FC96E7E7460519906D9C108F /* Resources */ = {
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
 				DEFB6EAE502F86E97D96EE28 /* Assets.xcassets in Resources */,
+				0C8C23CB956A7348211F05D6 /* MazeIOSInfo.plist in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -161,9 +215,44 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		C33954D8F6851323FE563557 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				283CB5C325A1378A7CEBF357 /* ContentView.swift in Sources */,
+				A895B8B4C4A4D3C65F9A4F0C /* ControlsView.swift in Sources */,
+				2C7C6D0C1A0FC3AB532F248C /* MazeApp.swift in Sources */,
+				7A3CE2B704580455C9EE9DFE /* MazeCanvasView.swift in Sources */,
+				333910A0C2D5387BA96C3BAA /* MazeViewModel.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXSourcesBuildPhase section */
 
 /* Begin XCBuildConfiguration section */
+		5A42485B708EEC6E8CD8C500 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGNING_ALLOWED = NO;
+				CODE_SIGNING_REQUIRED = NO;
+				CODE_SIGN_IDENTITY = "";
+				ENABLE_PREVIEWS = YES;
+				INFOPLIST_FILE = Sources/MazeIOSInfo.plist;
+				IPHONEOS_DEPLOYMENT_TARGET = 18.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = com.dirkgates.Maze.iOS;
+				PRODUCT_NAME = Maze;
+				SDKROOT = iphoneos;
+				SUPPORTS_MACCATALYST = NO;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Release;
+		};
 		6C19BE6C6365A1C1B1214E76 /* Release */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
@@ -212,11 +301,11 @@
 				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
 				GCC_WARN_UNUSED_FUNCTION = YES;
 				GCC_WARN_UNUSED_VARIABLE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 18.0;
 				MACOSX_DEPLOYMENT_TARGET = 15.0;
 				MTL_ENABLE_DEBUG_INFO = NO;
 				MTL_FAST_MATH = YES;
 				PRODUCT_NAME = "$(TARGET_NAME)";
-				SDKROOT = macosx;
 				SWIFT_COMPILATION_MODE = wholemodule;
 				SWIFT_OPTIMIZATION_LEVEL = "-O";
 				SWIFT_STRICT_CONCURRENCY = complete;
@@ -320,16 +409,39 @@
 				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
 				GCC_WARN_UNUSED_FUNCTION = YES;
 				GCC_WARN_UNUSED_VARIABLE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 18.0;
 				MACOSX_DEPLOYMENT_TARGET = 15.0;
 				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
 				MTL_FAST_MATH = YES;
 				ONLY_ACTIVE_ARCH = YES;
 				PRODUCT_NAME = "$(TARGET_NAME)";
-				SDKROOT = macosx;
 				SWIFT_ACTIVE_COMPILATION_CONDITIONS = DEBUG;
 				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
 				SWIFT_STRICT_CONCURRENCY = complete;
 				SWIFT_VERSION = 6.0;
+			};
+			name = Debug;
+		};
+		DA4ADCF8A4E96FE178F0B6BC /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGNING_ALLOWED = NO;
+				CODE_SIGNING_REQUIRED = NO;
+				CODE_SIGN_IDENTITY = "";
+				ENABLE_PREVIEWS = YES;
+				INFOPLIST_FILE = Sources/MazeIOSInfo.plist;
+				IPHONEOS_DEPLOYMENT_TARGET = 18.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = com.dirkgates.Maze.iOS;
+				PRODUCT_NAME = Maze;
+				SDKROOT = iphoneos;
+				SUPPORTS_MACCATALYST = NO;
+				TARGETED_DEVICE_FAMILY = "1,2";
 			};
 			name = Debug;
 		};
@@ -341,6 +453,15 @@
 			buildConfigurations = (
 				6C2F6F56AFC5ABA891BFA752 /* Debug */,
 				ACFAA9AF879014112C7E8D4D /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+		C87F523EDA46CEC2107F2BD4 /* Build configuration list for PBXNativeTarget "MazeIOS" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				DA4ADCF8A4E96FE178F0B6BC /* Debug */,
+				5A42485B708EEC6E8CD8C500 /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Debug;
@@ -364,6 +485,10 @@
 /* End XCLocalSwiftPackageReference section */
 
 /* Begin XCSwiftPackageProductDependency section */
+		22479930A1FC57429B130F71 /* MazeKit */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = MazeKit;
+		};
 		6EE3F2CF76E80E9BF5280643 /* MazeKit */ = {
 			isa = XCSwiftPackageProductDependency;
 			productName = MazeKit;

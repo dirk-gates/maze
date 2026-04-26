@@ -3,6 +3,7 @@ options:
   bundleIdPrefix: com.dirkgates
   deploymentTarget:
     macOS: "15.0"
+    iOS: "18.0"
   createIntermediateGroups: true
   generateEmptyDirectories: true
 
@@ -19,6 +20,7 @@ packages:
     path: ../MazeKit
 
 targets:
+  # ------------------------------------------------------------ macOS
   Maze:
     type: application
     platform: macOS
@@ -45,4 +47,49 @@ targets:
         CFBundleVersion: "1"
         LSApplicationCategoryType: public.app-category.games
         LSMinimumSystemVersion: "$(MACOSX_DEPLOYMENT_TARGET)"
+        NSHumanReadableCopyright: "Copyright (c) 2026 Dirk Gates"
+
+  # ------------------------------------------------------------ iOS
+  MazeIOS:
+    type: application
+    platform: iOS
+    deploymentTarget: "18.0"
+    sources:
+      - path: Sources
+        excludes:
+          - "Info.plist"
+          - "MazeIOSInfo.plist"
+    dependencies:
+      - package: MazeKit
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.dirkgates.Maze.iOS
+        PRODUCT_NAME: Maze
+        TARGETED_DEVICE_FAMILY: "1,2"
+        ENABLE_PREVIEWS: YES
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+        ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME: AccentColor
+        SUPPORTS_MACCATALYST: NO
+        CODE_SIGN_IDENTITY: ""
+        CODE_SIGNING_REQUIRED: NO
+        CODE_SIGNING_ALLOWED: NO
+    info:
+      path: Sources/MazeIOSInfo.plist
+      properties:
+        CFBundleShortVersionString: "0.1"
+        CFBundleVersion: "1"
+        LSRequiresIPhoneOS: true
+        UILaunchScreen:
+          UIColorName: ""
+        UIRequiredDeviceCapabilities:
+          - arm64
+        UISupportedInterfaceOrientations:
+          - UIInterfaceOrientationPortrait
+          - UIInterfaceOrientationLandscapeLeft
+          - UIInterfaceOrientationLandscapeRight
+        UISupportedInterfaceOrientations~ipad:
+          - UIInterfaceOrientationPortrait
+          - UIInterfaceOrientationPortraitUpsideDown
+          - UIInterfaceOrientationLandscapeLeft
+          - UIInterfaceOrientationLandscapeRight
         NSHumanReadableCopyright: "Copyright (c) 2026 Dirk Gates"
