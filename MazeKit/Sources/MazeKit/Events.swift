@@ -7,6 +7,13 @@
 // them concurrently to the Canvas).
 
 public enum GenerationEvent: Sendable {
+    /// A new attempt has begun. Emitted at the start of every attempt
+    /// when a Generator with `minPathLength` is regenerating because
+    /// the previous attempt didn't meet the threshold. Renderers that
+    /// want to clear and re-animate can hook this; renderers that just
+    /// want the final result can ignore it.
+    case attempt(Int)
+
     /// A cell was carved (wall -> path).
     case carved(Coord)
 

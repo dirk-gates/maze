@@ -20,12 +20,48 @@ public actor Generator {
 
     /// Begin generation. Returns a stream of GenerationEvents.
     /// The final event is always `.finished(Maze)`.
+    ///
+    /// If `minPathLength` is set, the Generator may regenerate one or
+    /// more times until a maze whose solution meets the threshold is
+    /// produced (or `maxAttempts` is reached, in which case the longest
+    /// attempt found is returned). Each attempt is announced with an
+    /// `.attempt(n)` event so renderers can clear and re-animate.
     public nonisolated func generate() -> AsyncStream<GenerationEvent> {
         AsyncStream { continuation in
             let params = self.params
             Task.detached(priority: .userInitiated) {
-                var engine = GeneratorEngine(params: params, continuation: continuation)
-                engine.run()
+                let target = params.minPathLength ?? 0
+                var best     : Maze? = nil
+                var bestLen  : Int   = -1
+
+                for attempt in 1...max(1, params.maxAttempts) {
+                    continuation.yield(.attempt(attempt))
+
+                    // Derive a fresh seed each attempt so we don't keep
+                    // generating the same maze when the first didn't
+                    // satisfy minPathLength.
+                    var attemptParams = params
+                    if let s = params.seed {
+                        attemptParams.seed = s &+ UInt64(attempt - 1)
+                    }
+
+                    var engine = GeneratorEngine(params: attemptParams,
+                                                 continuation: continuation)
+                    let maze = engine.run()
+                    let len  = maze.solution?.count ?? 0
+
+                    if len > bestLen {
+                        bestLen = len
+                        best    = maze
+                    }
+                    if len >= target {
+                        break
+                    }
+                }
+
+                if let m = best {
+                    continuation.yield(.finished(m))
+                }
                 continuation.finish()
             }
         }
@@ -114,7 +150,11 @@ struct GeneratorEngine {
     // MARK: - Top-level orchestration
     // ------------------------------------------------------------------
 
-    mutating func run() {
+    /// Run one generation attempt. Returns the resulting Maze. Emits
+    /// every event except `.finished` (the outer loop in
+    /// `Generator.generate()` is responsible for emitting `.finished`
+    /// once, on the kept attempt).
+    mutating func run() -> Maze {
         var (row, col) = initializeGrid()
         carvePath(row: &row, col: &col)
         while let (r, c) = findPathStart() {
@@ -142,7 +182,7 @@ struct GeneratorEngine {
         maze.solution = solution
 
         continuation.yield(.opened(entrance: entrance, exit: exit))
-        continuation.yield(.finished(maze))
+        return maze
     }
 
     // ------------------------------------------------------------------

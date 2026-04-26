@@ -134,4 +134,32 @@ struct PropertyTests {
             }
         }
     }
+
+    @Test("minPathLength produces a maze meeting the threshold")
+    func minPathLengthSatisfied() async {
+        // Ask for at least half the cells on the solution path.
+        // Best-opening search picks the longest, so meeting 50% is
+        // very achievable -- typical first attempts already exceed it.
+        let p = GeneratorParameters(
+            width             : 12,
+            height            : 8,
+            lookAheadDepth    : 0,
+            minPathLength     : 12 * 8 / 2,
+            seed              : 1
+        )
+        var attemptCount = 0
+        var finalLen     = 0
+        for await event in Generator(p).generate() {
+            switch event {
+            case .attempt:
+                attemptCount += 1
+            case .finished(let m):
+                finalLen = m.solution?.count ?? 0
+            default: break
+            }
+        }
+        #expect(attemptCount >= 1)
+        #expect(finalLen >= p.minPathLength!,
+                "got path length \(finalLen) after \(attemptCount) attempts")
+    }
 }
