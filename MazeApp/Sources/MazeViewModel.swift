@@ -1,7 +1,6 @@
 // MazeViewModel -- observable state container. Owns the Generator and
 // Solver tasks and translates their event streams into UI-friendly
-// state (a set of carved cells during generation, a partial solution
-// path during solving, etc.).
+// state for the Canvas-based renderer.
 
 import Foundation
 import MazeKit
@@ -20,6 +19,9 @@ final class MazeViewModel {
     // ----- runtime state observed by the views -----
     var maze         : Maze?      = nil
     var carvedCells  : Set<Coord> = []
+    var openWalls    : Set<Edge>  = []
+    var entranceGate : Coord?     = nil
+    var exitGate     : Coord?     = nil
     var solutionPath : [Coord]    = []
     var solveProgress: Int        = 0
     var attemptCount : Int        = 0
@@ -53,6 +55,9 @@ final class MazeViewModel {
 
     private func runGenerate() async {
         carvedCells.removeAll()
+        openWalls.removeAll()
+        entranceGate = nil
+        exitGate     = nil
         solutionPath.removeAll()
         solveProgress = 0
         attemptCount  = 0
@@ -68,7 +73,6 @@ final class MazeViewModel {
         )
         let stream = Generator(params).generate()
 
-        var carved = 0
         for await event in stream {
             if Task.isCancelled { break }
             await delayPerCell()
@@ -76,18 +80,26 @@ final class MazeViewModel {
             switch event {
             case .attempt(let n):
                 attemptCount = n
-                carved = 0
                 carvedCells.removeAll()
+                openWalls.removeAll()
+                entranceGate = nil
+                exitGate     = nil
                 statsLine = "attempt \(n)…"
             case .carved(let c):
                 carvedCells.insert(c)
-                carved += 1
-                statsLine = "\(carved) cells carved"
-            case .considering, .pushed, .opened:
+                statsLine = "\(carvedCells.count) cells carved"
+            case .opened(let edge):
+                openWalls.insert(edge)
+            case .closed(let edge):
+                openWalls.remove(edge)
+            case .gates(let entrance, let exit):
+                entranceGate = entrance
+                exitGate     = exit
+            case .considering, .pushed:
                 break
             case .finished(let m):
                 maze      = m
-                statsLine = "\(carved) cells, "
+                statsLine = "\(carvedCells.count) cells, "
                           + "solution \(m.solution?.count ?? 0)"
             }
         }
@@ -117,8 +129,6 @@ final class MazeViewModel {
     }
 
     private func delayPerCell() async {
-        // animationSpeed 0 = slowest (50ms per cell)
-        // animationSpeed 1 = instant (no delay)
         let ms = (1.0 - animationSpeed) * 50.0
         if ms < 0.5 { return }
         try? await Task.sleep(nanoseconds: UInt64(ms * 1_000_000))

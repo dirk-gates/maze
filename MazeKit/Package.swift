@@ -12,12 +12,18 @@ let package = Package(
         .iOS(.v18),         // one back from current iOS 26
     ],
     products: [
-        .library(name: "MazeKit", targets: ["MazeKit"]),
+        .library   (name: "MazeKit",            targets: ["MazeKit"]),
+        .executable(name: "MazeIconGenerator",  targets: ["MazeIconGenerator"]),
     ],
     targets: [
         .target(
             name : "MazeKit",
             path : "Sources/MazeKit"
+        ),
+        .executableTarget(
+            name        : "MazeIconGenerator",
+            dependencies: ["MazeKit"],
+            path        : "Sources/MazeIconGenerator"
         ),
         .testTarget(
             name        : "MazeKitTests",

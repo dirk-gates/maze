@@ -181,7 +181,7 @@ struct GeneratorEngine {
         )
         maze.solution = solution
 
-        continuation.yield(.opened(entrance: entrance, exit: exit))
+        continuation.yield(.gates(entrance: entrance, exit: exit))
         return maze
     }
 
@@ -232,15 +232,55 @@ struct GeneratorEngine {
     }
 
     /// Write a cell and emit a public event when appropriate.
+    /// Distinguishes three position types in the doubled grid:
+    ///   even row + even col: a cell. Emits .carved on wall->path.
+    ///   even row + odd col : a vertical wall slot. Emits .opened/.closed.
+    ///   odd row + even col : a horizontal wall slot. Same.
+    ///   odd row + odd col  : a wall corner. No events (always wall).
     private mutating func setCell(_ row: Int, _ col: Int, _ val: UInt8) {
         guard grid[row][col] != val else { return }
         grid[row][col] = val
-        // Emit .carved only for actual cell positions (both row+col even),
-        // not the wall slots between cells. The renderer then draws
-        // walls/edges based on cell adjacency.
-        if val == cellPath, row.isMultiple(of: 2), col.isMultiple(of: 2) {
-            continuation.yield(.carved(toCellCoord(row: row, col: col)))
+
+        let rowEven = row.isMultiple(of: 2)
+        let colEven = col.isMultiple(of: 2)
+
+        if rowEven, colEven {
+            if val == cellPath {
+                continuation.yield(.carved(toCellCoord(row: row, col: col)))
+            }
+        } else if rowEven != colEven, let edge = wallSlotEdge(row: row, col: col) {
+            if val == cellPath {
+                continuation.yield(.opened(edge))
+            } else if val == cellWall {
+                continuation.yield(.closed(edge))
+            }
         }
+    }
+
+    /// Translate a wall-slot raw-grid position to an Edge between the
+    /// two cell-space Coords on either side. Returns nil if the slot
+    /// is on the maze perimeter (one side would be outside the maze).
+    private func wallSlotEdge(row: Int, col: Int) -> Edge? {
+        if row.isMultiple(of: 2), !col.isMultiple(of: 2) {
+            // Vertical wall: between cells (col-3)/2 and (col-1)/2 at y=(row-2)/2
+            let cellY  = (row - 2) / 2
+            let cellX1 = (col - 3) / 2
+            let cellX2 = (col - 1) / 2
+            guard cellX1 >= 0, cellX2 < params.width,
+                  cellY  >= 0, cellY  < params.height else { return nil }
+            return Edge(Coord(x: cellX1, y: cellY),
+                        Coord(x: cellX2, y: cellY))
+        } else if !row.isMultiple(of: 2), col.isMultiple(of: 2) {
+            // Horizontal wall: between cells (row-3)/2 and (row-1)/2 at x=(col-2)/2
+            let cellX  = (col - 2) / 2
+            let cellY1 = (row - 3) / 2
+            let cellY2 = (row - 1) / 2
+            guard cellY1 >= 0, cellY2 < params.height,
+                  cellX  >= 0, cellX  < params.width else { return nil }
+            return Edge(Coord(x: cellX, y: cellY1),
+                        Coord(x: cellX, y: cellY2))
+        }
+        return nil
     }
 
     /// Convert raw grid coordinates to public cell-space Coord.
