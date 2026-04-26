@@ -22,10 +22,13 @@ struct ControlsView: View {
     // ----- layouts -----
 
     private var singleRow: some View {
+        // Slider gets all the slack the row can spare (between the
+        // buttons on the left and stats/settings on the right) so it
+        // stretches across iPhone landscape and iPad widths instead
+        // of pinning to a stubby 200pt.
         HStack(spacing: 16) {
             buttons
-            Spacer()
-            speedControl.frame(width: 200)
+            speedControl.frame(minWidth: 200, maxWidth: .infinity)
             stats
             settingsButton
         }
