@@ -35,6 +35,20 @@ struct ContentView: View {
     }
 
     var body: some View {
+        // Apply preferredColorScheme ONLY when the user has chosen a
+        // specific override. SwiftUI's .preferredColorScheme(nil) does
+        // not reliably "release" a previously set override -- the
+        // window stays in the prior scheme. Applying the modifier
+        // conditionally side-steps that, so going back to System
+        // immediately reverts the chrome to the actual system value.
+        if let scheme = schemeOverride {
+            mainContent.preferredColorScheme(scheme)
+        } else {
+            mainContent
+        }
+    }
+
+    private var mainContent: some View {
         VStack(spacing: 0) {
             MazeCanvasView(viewModel: viewModel, theme: theme)
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -43,7 +57,6 @@ struct ContentView: View {
 
             ControlsView(viewModel: viewModel, showingSettings: $showingSettings)
         }
-        .preferredColorScheme(schemeOverride)
         .background(theme.background)
         #if os(iOS)
         .ignoresSafeArea(.container, edges: .horizontal)
