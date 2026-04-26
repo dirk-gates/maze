@@ -1,13 +1,16 @@
 // ContentView -- top-level layout. Maze fills the bulk of the window;
 // a Controls bar pinned to the bottom holds Generate / Solve / Settings.
 //
+// Cell counts (width / height) auto-fit the actual canvas geometry on
+// every appearance and orientation change, so the maze fills the
+// screen on both iPhone and iPad in either orientation. Manual
+// settings overrides are still respected for one generation, but the
+// next orientation change re-fits.
+//
 // The view model is owned by MazeApp and injected here so the App
-// scene itself can apply `.preferredColorScheme(viewModel.schemeOverride)`
-// at the WindowGroup level. That's what makes the appearance picker
-// reliably revert sheets and chrome back to the system scheme when
-// the user picks "System" -- the modifier covers everything in the
-// scene including sheet hierarchies, which a modifier applied
-// further down inside the view tree does not.
+// scene can apply `.preferredColorScheme(viewModel.schemeOverride)`
+// at WindowGroup scope -- which is what makes the appearance picker
+// reach sheets and reliably revert to the system scheme.
 
 import SwiftUI
 
@@ -23,8 +26,12 @@ struct ContentView: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            MazeCanvasView(viewModel: viewModel, theme: theme)
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
+            GeometryReader { geo in
+                MazeCanvasView(viewModel: viewModel, theme: theme)
+                    .onAppear { fitMaze(to: geo.size, regenerate: !didInitialLaunch) }
+                    .onChange(of: geo.size) { _, new in fitMaze(to: new, regenerate: true) }
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
 
             Divider()
 
@@ -37,16 +44,6 @@ struct ContentView: View {
         .sheet(isPresented: $showingSettings) {
             SettingsView(viewModel: viewModel)
         }
-        .onAppear {
-            // Gate to the first-ever appearance. On iOS, dismissing
-            // the Settings sheet re-fires .onAppear on the host view,
-            // and we don't want that to auto-regenerate -- the user
-            // should have to press Generate explicitly.
-            guard !didInitialLaunch else { return }
-            didInitialLaunch = true
-            applyPlatformDefaults()
-            viewModel.generate()
-        }
         #if os(macOS)
         .onReceive(NotificationCenter.default.publisher(for: .mazeGenerate)) { _ in
             viewModel.generate()
@@ -57,17 +54,39 @@ struct ContentView: View {
         #endif
     }
 
-    private func applyPlatformDefaults() {
-        #if os(iOS)
-        // iPad gets a denser default so the maze fills its larger
-        // canvas; iPhone stays at portrait-friendly 20x30.
-        if UIDevice.current.userInterfaceIdiom == .pad {
-            viewModel.width  = 30
-            viewModel.height = 40
-        } else {
-            viewModel.width  = 20
-            viewModel.height = 30
+    /// Compute the largest (cells_wide, cells_tall) pair whose rendered
+    /// maze fully fills `size` at the per-platform target unit pixel
+    /// size, then update the view model and (optionally) regenerate.
+    /// Skips the regenerate if the cell counts haven't changed -- avoids
+    /// spurious regens on no-op layout passes.
+    private func fitMaze(to size: CGSize, regenerate: Bool) {
+        guard size.width > 0, size.height > 0 else { return }
+
+        let targetUnit = targetUnitPixels()
+        // Maze grid in "units": w cells take 3*w cell-units + (w+1) wall-units = 4w+1.
+        // Solving 4w + 1 ≤ size.width / targetUnit → w = floor((size.width / targetUnit - 1) / 4)
+        let w = max(4, Int((size.width  / targetUnit - 1) / 4))
+        let h = max(4, Int((size.height / targetUnit - 1) / 4))
+
+        let changed = (w != viewModel.width) || (h != viewModel.height)
+        viewModel.width  = w
+        viewModel.height = h
+
+        if regenerate && changed {
+            viewModel.generate()
         }
+        didInitialLaunch = true
+    }
+
+    /// Target pixel size for one "unit" (= one wall thickness). Cell
+    /// edge is 3x this. Larger value → fewer, chunkier cells; smaller
+    /// → finer maze. Tuned so phone cells stay finger-sized and iPad
+    /// cells stay readable from arm's length.
+    private func targetUnitPixels() -> CGFloat {
+        #if os(iOS)
+        return UIDevice.current.userInterfaceIdiom == .pad ? 9 : 6
+        #else
+        return 8
         #endif
     }
 }
