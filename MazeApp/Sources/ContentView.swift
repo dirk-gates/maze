@@ -1,11 +1,13 @@
 // ContentView -- top-level layout. Maze fills the bulk of the window;
 // a Controls bar pinned to the bottom holds Generate / Solve / Settings.
 //
-// Cell counts (width / height) auto-fit the actual canvas geometry on
-// every appearance and orientation change, so the maze fills the
-// screen on both iPhone and iPad in either orientation. Manual
-// settings overrides are still respected for one generation, but the
-// next orientation change re-fits.
+// Auto-fit policy: we hand the current canvas size and per-platform
+// target unit pixel size to the view model. The view model uses
+// these to refit width/height ONLY when a new generation is kicked
+// off (initial launch, Generate button, ⌘N). Orientation flips and
+// other geometry changes update the cached size but leave the
+// existing maze and dimensions alone -- the user said rotation
+// shouldn't auto-regenerate.
 //
 // The view model is owned by MazeApp and injected here so the App
 // scene can apply `.preferredColorScheme(viewModel.schemeOverride)`
@@ -28,8 +30,21 @@ struct ContentView: View {
         VStack(spacing: 0) {
             GeometryReader { geo in
                 MazeCanvasView(viewModel: viewModel, theme: theme)
-                    .onAppear { fitMaze(to: geo.size, regenerate: !didInitialLaunch) }
-                    .onChange(of: geo.size) { _, new in fitMaze(to: new, regenerate: true) }
+                    .onAppear {
+                        viewModel.targetUnitPx = targetUnitPixels()
+                        viewModel.canvasSize   = geo.size
+                        if !didInitialLaunch {
+                            didInitialLaunch = true
+                            viewModel.generate()
+                        }
+                    }
+                    .onChange(of: geo.size) { _, new in
+                        // Cache the new size so the next user-driven
+                        // generation fits the current orientation, but
+                        // do NOT regenerate -- rotation shouldn't kick
+                        // off a new maze.
+                        viewModel.canvasSize = new
+                    }
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
 
@@ -55,30 +70,6 @@ struct ContentView: View {
             viewModel.solve()
         }
         #endif
-    }
-
-    /// Compute the largest (cells_wide, cells_tall) pair whose rendered
-    /// maze fully fills `size` at the per-platform target unit pixel
-    /// size, then update the view model and (optionally) regenerate.
-    /// Skips the regenerate if the cell counts haven't changed -- avoids
-    /// spurious regens on no-op layout passes.
-    private func fitMaze(to size: CGSize, regenerate: Bool) {
-        guard size.width > 0, size.height > 0 else { return }
-
-        let targetUnit = targetUnitPixels()
-        // Maze grid in "units": w cells take 3*w cell-units + (w+1) wall-units = 4w+1.
-        // Solving 4w + 1 ≤ size.width / targetUnit → w = floor((size.width / targetUnit - 1) / 4)
-        let w = max(4, Int((size.width  / targetUnit - 1) / 4))
-        let h = max(4, Int((size.height / targetUnit - 1) / 4))
-
-        let changed = (w != viewModel.width) || (h != viewModel.height)
-        viewModel.width  = w
-        viewModel.height = h
-
-        if regenerate && changed {
-            viewModel.generate()
-        }
-        didInitialLaunch = true
     }
 
     /// Target pixel size for one "unit" (= one wall thickness). Cell

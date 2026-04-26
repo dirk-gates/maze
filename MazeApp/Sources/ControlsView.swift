@@ -89,9 +89,10 @@ struct ControlsView: View {
         }
     }
 
-    // 5% per tap -> 20 taps to traverse, ~13% perceptual speed change
-    // per tap given the log curve in the view model.
-    private let speedStep = 0.05
+    // 2.5% per tap -> ~40 taps to traverse. Finer than the 5% step
+    // so the transition between "very fast" and "instant" near the
+    // top of the slider takes several taps instead of jumping.
+    private let speedStep = 0.025
 
     private func nudgeSpeed(by delta: Double) {
         viewModel.animationSpeed = min(1.0, max(0.0, viewModel.animationSpeed + delta))

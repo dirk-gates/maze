@@ -2,6 +2,7 @@
 // Solver tasks and translates their event streams into UI-friendly
 // state for the Canvas-based renderer.
 
+import CoreGraphics
 import Foundation
 import MazeKit
 import Observation
@@ -56,14 +57,35 @@ final class MazeViewModel {
     var isSolving    : Bool       = false
     var statsLine    : String     = ""
 
+    // Latest known maze canvas size + target unit pixels, set by
+    // ContentView via a GeometryReader. We refit width/height to
+    // these whenever a new generation is kicked off, but NOT on
+    // arbitrary geometry changes (e.g. orientation flips) -- those
+    // leave the existing maze and dims alone.
+    var canvasSize  : CGSize  = .zero
+    var targetUnitPx: CGFloat = 8
+
     // ----- private -----
     private var task: Task<Void, Never>?
 
     // ----- intents -----
 
     func generate() {
+        fitDimensionsToCanvas()
         cancel()
         task = Task { [weak self] in await self?.runGenerate() }
+    }
+
+    /// Recompute width/height so the maze fills `canvasSize` at the
+    /// current `targetUnitPx`. Called only when launching a new
+    /// generation -- never on incidental layout passes.
+    private func fitDimensionsToCanvas() {
+        guard canvasSize.width > 0, canvasSize.height > 0 else { return }
+        // Maze grid in "units": w cells take 4w+1 units (3 per cell + 1 wall, with one extra wall).
+        let w = max(4, Int((canvasSize.width  / targetUnitPx - 1) / 4))
+        let h = max(4, Int((canvasSize.height / targetUnitPx - 1) / 4))
+        width  = w
+        height = h
     }
 
     func solve() {
@@ -159,20 +181,18 @@ final class MazeViewModel {
     }
 
     private func delayPerCell() async {
-        // Slider response: log curve over a deliberately tight range
-        // (60ms .. 3ms), with the top 10% of travel mapped to instant.
-        // Earlier curves stretched all the way to 0.5ms, which is
-        // below the perceptual / display-refresh floor -- the upper
-        // chunk of the slider felt "twitchy" because tiny thumb
-        // movements moved between values the eye can't distinguish.
-        // 60→3ms is ~20x dynamic range and stays visible end-to-end;
-        // the wide instant zone gives users a clear "skip animation"
-        // park spot at the right edge.
-        let instantThreshold = 0.90
+        // Slider response: log curve over a wider range (150ms..1ms),
+        // with the top 5% mapped to instant. The wider range gives
+        // more dynamic range at both ends -- slow is genuinely slow
+        // (~7 cells/sec) so the slider has room to act when per-cell
+        // compute is heavy (e.g. high look-ahead), and the narrower
+        // instant zone leaves more taps separating "very fast" from
+        // "skip animation".
+        let instantThreshold = 0.95
         if animationSpeed >= instantThreshold { return }
         let t     = animationSpeed / instantThreshold
-        let maxMs = 60.0
-        let minMs = 3.0
+        let maxMs = 150.0
+        let minMs = 1.0
         let ms    = maxMs * pow(minMs / maxMs, t)
         try? await Task.sleep(nanoseconds: UInt64(ms * 1_000_000))
     }
