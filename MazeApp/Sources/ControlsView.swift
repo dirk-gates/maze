@@ -68,12 +68,30 @@ struct ControlsView: View {
 
     private var speedControl: some View {
         HStack(spacing: 8) {
-            Image(systemName: "tortoise")
-                .foregroundStyle(.secondary)
+            Button { nudgeSpeed(by: -speedStep) } label: {
+                Image(systemName: "tortoise")
+                    .foregroundStyle(.secondary)
+            }
+            .buttonStyle(.borderless)
+            .accessibilityLabel("Slower")
+
             Slider(value: $viewModel.animationSpeed, in: 0...1)
-            Image(systemName: "hare")
-                .foregroundStyle(.secondary)
+
+            Button { nudgeSpeed(by: speedStep) } label: {
+                Image(systemName: "hare")
+                    .foregroundStyle(.secondary)
+            }
+            .buttonStyle(.borderless)
+            .accessibilityLabel("Faster")
         }
+    }
+
+    // 5% per tap -> 20 taps to traverse, ~13% perceptual speed change
+    // per tap given the log curve in the view model.
+    private let speedStep = 0.05
+
+    private func nudgeSpeed(by delta: Double) {
+        viewModel.animationSpeed = min(1.0, max(0.0, viewModel.animationSpeed + delta))
     }
 
     @ViewBuilder

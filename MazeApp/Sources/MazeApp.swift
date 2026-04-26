@@ -1,13 +1,22 @@
 // MazeApp -- @main entry. Same scene used on macOS and iOS / iPadOS;
 // macOS-only scene modifiers are guarded with #if os(macOS).
+//
+// The view model lives at App scope so that the appearance picker
+// can drive `.preferredColorScheme` directly on the WindowGroup --
+// which is what makes the override reach sheets and chrome, and
+// makes "System" reliably revert (mirrors the pattern used in our
+// other SwiftUI apps under /Users/dirkgates/work/twbuild).
 
 import SwiftUI
 
 @main
 struct MazeApp: App {
+    @State private var viewModel = MazeViewModel()
+
     var body: some Scene {
         WindowGroup {
-            ContentView()
+            ContentView(viewModel: viewModel)
+                .preferredColorScheme(viewModel.schemeOverride)
             #if os(macOS)
                 .frame(minWidth: 600, minHeight: 480)
             #endif

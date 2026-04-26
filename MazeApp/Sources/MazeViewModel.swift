@@ -5,6 +5,7 @@
 import Foundation
 import MazeKit
 import Observation
+import SwiftUI
 
 enum AppearancePreference: String, CaseIterable, Identifiable, Sendable {
     case system, light, dark
@@ -29,10 +30,23 @@ final class MazeViewModel {
     var animationSpeed: Double  = 0.65   // 0 = slow, 1 = instant
     var appearance    : AppearancePreference = .system
 
+    /// Translates the user's appearance preference into the value
+    /// expected by `.preferredColorScheme(_:)`. `.system` becomes
+    /// `nil`, which releases any prior override and lets SwiftUI
+    /// fall back to the OS-level setting. Applied at WindowGroup
+    /// scope so it reaches sheets too.
+    var schemeOverride: ColorScheme? {
+        switch appearance {
+        case .system: return nil
+        case .light : return .light
+        case .dark  : return .dark
+        }
+    }
+
     // ----- runtime state observed by the views -----
     var maze         : Maze?      = nil
     var carvedCells  : Set<Coord> = []
-    var openWalls    : Set<Edge>  = []
+    var openWalls    : Set<MazeKit.Edge>  = []
     var entranceGate : Coord?     = nil
     var exitGate     : Coord?     = nil
     var solutionPath : [Coord]    = []
@@ -145,21 +159,21 @@ final class MazeViewModel {
     }
 
     private func delayPerCell() async {
-        // Logarithmic / constant-ratio response. Each equal-sized
-        // slider movement produces the same RELATIVE speed change
-        // (~3x faster per 25% of travel), so the perceived rate of
-        // change feels uniform across the whole slider range. The
-        // earlier polynomial curves clustered "near-instant" values
-        // into the top 20% of slider, so small thumb movements there
-        // jumped between very different visual feels.
-        //
-        // The very top 2% of slider is treated as instant (no delay)
-        // so users who just want to skip the animation can pin the
-        // slider to the right.
-        if animationSpeed >= 0.98 { return }
-        let maxMs = 50.0
-        let minMs = 0.5
-        let ms = maxMs * pow(minMs / maxMs, animationSpeed)
+        // Slider response: log curve over a deliberately tight range
+        // (60ms .. 3ms), with the top 10% of travel mapped to instant.
+        // Earlier curves stretched all the way to 0.5ms, which is
+        // below the perceptual / display-refresh floor -- the upper
+        // chunk of the slider felt "twitchy" because tiny thumb
+        // movements moved between values the eye can't distinguish.
+        // 60→3ms is ~20x dynamic range and stays visible end-to-end;
+        // the wide instant zone gives users a clear "skip animation"
+        // park spot at the right edge.
+        let instantThreshold = 0.90
+        if animationSpeed >= instantThreshold { return }
+        let t     = animationSpeed / instantThreshold
+        let maxMs = 60.0
+        let minMs = 3.0
+        let ms    = maxMs * pow(minMs / maxMs, t)
         try? await Task.sleep(nanoseconds: UInt64(ms * 1_000_000))
     }
 }
