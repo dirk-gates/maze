@@ -38,9 +38,12 @@ struct ContentView: View {
             ControlsView(viewModel: viewModel, showingSettings: $showingSettings)
         }
         .background(theme.background)
-        #if os(iOS)
-        .ignoresSafeArea(.container, edges: .horizontal)
-        #endif
+        // NOTE: do not ignore horizontal safe area on iOS -- in
+        // landscape the iPhone Dynamic Island sits inside the
+        // horizontal safe area inset, and ignoring it would let the
+        // maze render underneath the island. The default behavior
+        // (respect safe area) leaves a small inset around the island
+        // and the rounded display corners, which is what we want.
         .sheet(isPresented: $showingSettings) {
             SettingsView(viewModel: viewModel)
         }
