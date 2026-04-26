@@ -1,31 +1,29 @@
-// MazeCanvasView -- vector rendering of the maze. New visual model:
-// the maze starts as a solid block of "material" (white), and
-// generation carves cells and wall slots out of it (black). When
-// generation finishes, the rendered image is unchanged -- there's
-// no flicker or transition because the carved set IS the final maze.
-//
-// Layout uses a 3:1 cell-to-wall ratio. Each cell is a square of
-// `cs` units; each wall slot between cells is `ws = cs / 3` thick.
-// Wall corners stay solid white (they're never carved).
+// MazeCanvasView -- vector rendering of the maze. Carve-out-of-
+// material visual (white walls on black in dark mode, black walls
+// on white in light mode); generation animates by progressively
+// painting cells and wall slots with `theme.carved` over the solid
+// `theme.material` block.
 
 import SwiftUI
 import MazeKit
 
 struct MazeCanvasView: View {
     @Bindable var viewModel: MazeViewModel
+    @Environment(\.colorScheme) private var colorScheme
 
     var body: some View {
+        let theme = Theme.classic(colorScheme)
         Canvas { context, size in
-            draw(context: context, size: size)
+            draw(context: context, size: size, theme: theme)
         }
-        .background(Color.black)
+        .background(theme.background)
     }
 
     // ------------------------------------------------------------------
     // Drawing
     // ------------------------------------------------------------------
 
-    private func draw(context: GraphicsContext, size: CGSize) {
+    private func draw(context: GraphicsContext, size: CGSize, theme: Theme) {
         let w = viewModel.width
         let h = viewModel.height
 
@@ -33,8 +31,9 @@ struct MazeCanvasView: View {
         let unitsX = CGFloat(w * 3 + (w + 1))
         let unitsY = CGFloat(h * 3 + (h + 1))
         let unit   = min(size.width / unitsX, size.height / unitsY)
-        let cs     = unit * 3      // cell side
-        let ws     = unit * 1      // wall thickness
+        let cs     = unit * 3
+        let ws     = unit * 1
+        let stride = cs + ws
 
         let mazeW = CGFloat(w) * cs + CGFloat(w + 1) * ws
         let mazeH = CGFloat(h) * cs + CGFloat(h + 1) * ws
@@ -44,11 +43,9 @@ struct MazeCanvasView: View {
         // -------- material (uncarved) --------
         context.fill(
             Path(CGRect(x: ox, y: oy, width: mazeW, height: mazeH)),
-            with: .color(.white))
+            with: .color(theme.material))
 
         // -------- helpers --------
-        let stride = cs + ws
-
         func cellRect(_ c: Coord) -> CGRect {
             let x = ox + ws + CGFloat(c.x) * stride
             let y = oy + ws + CGFloat(c.y) * stride
@@ -71,16 +68,16 @@ struct MazeCanvasView: View {
             }
         }
 
-        let carvedColor = GraphicsContext.Shading.color(.black)
+        let carvedShade = GraphicsContext.Shading.color(theme.carved)
 
         // -------- carved cells --------
         for c in viewModel.carvedCells {
-            context.fill(Path(cellRect(c)), with: carvedColor)
+            context.fill(Path(cellRect(c)), with: carvedShade)
         }
 
         // -------- open wall slots --------
         for edge in viewModel.openWalls {
-            context.fill(Path(wallRect(edge)), with: carvedColor)
+            context.fill(Path(wallRect(edge)), with: carvedShade)
         }
 
         // -------- entrance / exit gates in the border --------
@@ -88,17 +85,17 @@ struct MazeCanvasView: View {
             let x = ox + ws + CGFloat(entrance.x) * stride
             context.fill(
                 Path(CGRect(x: x, y: oy, width: cs, height: ws)),
-                with: carvedColor)
+                with: carvedShade)
         }
         if let exit = viewModel.exitGate, exit.x >= 0, exit.x < w {
             let x = ox + ws + CGFloat(exit.x) * stride
             let y = oy + mazeH - ws
             context.fill(
                 Path(CGRect(x: x, y: y, width: cs, height: ws)),
-                with: carvedColor)
+                with: carvedShade)
         }
 
-        // -------- solution path (green stroke through cell centers) --------
+        // -------- solution path (themed stroke through cell centers) --------
         let cellsDrawn = min(viewModel.solveProgress, viewModel.solutionPath.count)
         if cellsDrawn > 1 {
             var solPath = Path()
@@ -110,7 +107,7 @@ struct MazeCanvasView: View {
             }
             context.stroke(
                 solPath,
-                with: .color(.green),
+                with: .color(theme.solution),
                 style: StrokeStyle(lineWidth: cs * 0.36,
                                    lineCap: .round, lineJoin: .round))
         }

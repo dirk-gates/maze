@@ -1,10 +1,12 @@
 // ContentView -- top-level layout. Maze fills the bulk of the window;
-// a Controls bar pinned to the bottom holds Generate / Solve / speed.
+// a Controls bar pinned to the bottom holds Generate / Solve / Settings.
 
 import SwiftUI
 
 struct ContentView: View {
-    @State private var viewModel = MazeViewModel()
+    @State private var viewModel       = MazeViewModel()
+    @State private var showingSettings = false
+    @Environment(\.colorScheme) private var colorScheme
 
     var body: some View {
         VStack(spacing: 0) {
@@ -13,12 +15,15 @@ struct ContentView: View {
 
             Divider()
 
-            ControlsView(viewModel: viewModel)
+            ControlsView(viewModel: viewModel, showingSettings: $showingSettings)
         }
-        .background(Color.black)
+        .background(Theme.classic(colorScheme).background)
         #if os(iOS)
         .ignoresSafeArea(.container, edges: .horizontal)
         #endif
+        .sheet(isPresented: $showingSettings) {
+            SettingsView(viewModel: viewModel)
+        }
         .onAppear {
             // iPhone-friendly default size; macOS uses larger via .frame.
             #if os(iOS)

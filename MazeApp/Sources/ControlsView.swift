@@ -1,11 +1,13 @@
-// ControlsView -- bottom-of-window controls: Generate, Solve, speed.
-// Adaptive layout: single row on macOS / iPad; two rows on narrow
-// iPhone widths so the slider doesn't crowd out the buttons.
+// ControlsView -- bottom-of-window controls: Generate, Solve,
+// settings, speed. Adaptive layout: single row on macOS / iPad;
+// two rows on narrow iPhone widths so the slider doesn't crowd
+// out the buttons.
 
 import SwiftUI
 
 struct ControlsView: View {
     @Bindable var viewModel: MazeViewModel
+    @Binding var showingSettings: Bool
 
     var body: some View {
         ViewThatFits(in: .horizontal) {
@@ -25,6 +27,7 @@ struct ControlsView: View {
             Spacer()
             speedControl.frame(width: 200)
             stats
+            settingsButton
         }
     }
 
@@ -34,6 +37,7 @@ struct ControlsView: View {
                 buttons
                 Spacer()
                 stats
+                settingsButton
             }
             speedControl
         }
@@ -80,5 +84,16 @@ struct ControlsView: View {
                 .foregroundStyle(.secondary)
                 .lineLimit(1)
         }
+    }
+
+    private var settingsButton: some View {
+        Button {
+            showingSettings = true
+        } label: {
+            Image(systemName: "slider.horizontal.3")
+                .font(.title3)
+        }
+        .buttonStyle(.borderless)
+        .accessibilityLabel("Settings")
     }
 }

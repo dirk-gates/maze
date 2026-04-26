@@ -88,6 +88,7 @@ final class MazeViewModel {
             case .carved(let c):
                 carvedCells.insert(c)
                 statsLine = "\(carvedCells.count) cells carved"
+                Haptics.shared.carveTick()
             case .opened(let edge):
                 openWalls.insert(edge)
             case .closed(let edge):
@@ -95,6 +96,7 @@ final class MazeViewModel {
             case .gates(let entrance, let exit):
                 entranceGate = entrance
                 exitGate     = exit
+                Haptics.shared.milestone()
             case .considering, .pushed:
                 break
             case .finished(let m):
@@ -122,6 +124,7 @@ final class MazeViewModel {
             case .solved(let path):
                 solutionPath = path
                 solveProgress = path.count
+                Haptics.shared.success()
             case .backtracked:
                 break
             }
