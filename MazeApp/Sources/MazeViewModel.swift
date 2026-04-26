@@ -8,6 +8,12 @@ import MazeKit
 import Observation
 import SwiftUI
 
+private extension Comparable {
+    func clamped(to range: ClosedRange<Self>) -> Self {
+        min(max(self, range.lowerBound), range.upperBound)
+    }
+}
+
 enum AppearancePreference: String, CaseIterable, Identifiable, Sendable {
     case system, light, dark
     var id: String { rawValue }
@@ -27,9 +33,18 @@ final class MazeViewModel {
     var width         : Int     = 30
     var height        : Int     = 20
     var lookAheadDepth: Int     = 0
-    var seed          : UInt64? = nil
     var animationSpeed: Double  = 0.65   // 0 = slow, 1 = instant
     var appearance    : AppearancePreference = .system
+
+    /// Seed actually used by the most recent / current generation.
+    /// Captured so we can persist it to the library and replay later.
+    /// Always concrete (never nil) -- if the user hasn't pinned a
+    /// seed via load(_:), generate() picks a fresh random one.
+    private(set) var currentSeed: UInt64 = 0
+
+    /// Persistent history of generated mazes. Auto-appended to on
+    /// every successful .finished event.
+    let library: MazeLibrary
 
     /// Translates the user's appearance preference into the value
     /// expected by `.preferredColorScheme(_:)`. `.system` becomes
@@ -67,13 +82,49 @@ final class MazeViewModel {
 
     // ----- private -----
     private var task: Task<Void, Never>?
+    /// Pinned seed for the *next* generation only. Set by load(_:);
+    /// consumed by generate() and reset to nil so subsequent
+    /// Generate taps roll a fresh random seed.
+    private var pinnedSeed: UInt64? = nil
+
+    // ----- init -----
+
+    init(library: MazeLibrary = MazeLibrary()) {
+        self.library = library
+    }
 
     // ----- intents -----
 
     func generate() {
         fitDimensionsToCanvas()
+        let seed = pinnedSeed ?? UInt64.random(in: UInt64.min ... UInt64.max)
+        pinnedSeed   = nil
+        currentSeed  = seed
         cancel()
-        task = Task { [weak self] in await self?.runGenerate() }
+        task = Task { [weak self] in await self?.runGenerate(usingSeed: seed) }
+    }
+
+    /// Replay a previously-saved maze. Restores its parameters and
+    /// generates with the same seed so the resulting maze is byte-
+    /// identical to the original.
+    func load(_ saved: SavedMaze) {
+        width          = saved.width
+        height         = saved.height
+        lookAheadDepth = saved.lookAheadDepth
+        pinnedSeed     = saved.seed
+        generate()
+    }
+
+    /// Zoom in (smaller targetUnitPx → cells get smaller, more of them
+    /// fit) or out (larger targetUnitPx → bigger cells, fewer of them).
+    /// The maze is always refit-and-regenerated so it keeps filling
+    /// the canvas. Clamped to a sane range so zoom can't push the cell
+    /// size below 3px (illegible) or above 32px (silly chunky).
+    func zoom(by factor: CGFloat) {
+        let next = (targetUnitPx * factor).clamped(to: 3 ... 32)
+        guard next != targetUnitPx else { return }
+        targetUnitPx = next
+        generate()
     }
 
     /// Recompute width/height so the maze fills `canvasSize` at the
@@ -102,7 +153,7 @@ final class MazeViewModel {
 
     // ----- private runners -----
 
-    private func runGenerate() async {
+    private func runGenerate(usingSeed seed: UInt64) async {
         carvedCells.removeAll()
         openWalls.removeAll()
         entranceGate = nil
@@ -152,6 +203,12 @@ final class MazeViewModel {
                 maze      = m
                 statsLine = "\(carvedCells.count) cells, "
                           + "solution \(m.solution?.count ?? 0)"
+                library.append(SavedMaze(
+                    seed          : seed,
+                    width         : width,
+                    height        : height,
+                    lookAheadDepth: lookAheadDepth
+                ))
             }
         }
     }

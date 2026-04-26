@@ -17,6 +17,7 @@ import SwiftUI
 struct ContentView: View {
     @Bindable var viewModel: MazeViewModel
     @State private var showingSettings  = false
+    @State private var showingLibrary   = false
     @State private var didInitialLaunch = false
     @Environment(\.colorScheme) private var systemScheme
 
@@ -28,9 +29,16 @@ struct ContentView: View {
         VStack(spacing: 0) {
             GeometryReader { geo in
                 MazeCanvasView(viewModel: viewModel, theme: theme)
+                    .overlay(alignment: .topTrailing) {
+                        ZoomControls(viewModel: viewModel)
+                            .padding(.trailing, 12)
+                            .padding(.top    , 12)
+                    }
                     .onAppear {
-                        viewModel.targetUnitPx = targetUnitPixels()
-                        viewModel.canvasSize   = geo.size
+                        if !didInitialLaunch {
+                            viewModel.targetUnitPx = targetUnitPixels()
+                        }
+                        viewModel.canvasSize = geo.size
                         if !didInitialLaunch {
                             didInitialLaunch = true
                             viewModel.generate()
@@ -48,7 +56,11 @@ struct ContentView: View {
 
             Divider()
 
-            ControlsView(viewModel: viewModel, showingSettings: $showingSettings)
+            ControlsView(
+                viewModel       : viewModel,
+                showingSettings : $showingSettings,
+                showingLibrary  : $showingLibrary
+            )
         }
         .background(theme.background)
         // NOTE: do not ignore horizontal safe area on iOS -- in
@@ -59,6 +71,9 @@ struct ContentView: View {
         // and the rounded display corners, which is what we want.
         .sheet(isPresented: $showingSettings) {
             SettingsView(viewModel: viewModel)
+        }
+        .sheet(isPresented: $showingLibrary) {
+            LibraryView(viewModel: viewModel)
         }
         #if os(macOS)
         .onReceive(NotificationCenter.default.publisher(for: .mazeGenerate)) { _ in

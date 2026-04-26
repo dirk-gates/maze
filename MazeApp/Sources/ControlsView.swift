@@ -8,6 +8,7 @@ import SwiftUI
 struct ControlsView: View {
     @Bindable var viewModel: MazeViewModel
     @Binding var showingSettings: Bool
+    @Binding var showingLibrary : Bool
 
     var body: some View {
         ViewThatFits(in: .horizontal) {
@@ -30,6 +31,7 @@ struct ControlsView: View {
             buttons
             speedControl.frame(minWidth: 200, maxWidth: .infinity)
             stats
+            libraryButton
             settingsButton
         }
     }
@@ -40,6 +42,7 @@ struct ControlsView: View {
                 buttons
                 Spacer()
                 stats
+                libraryButton
                 settingsButton
             }
             speedControl
@@ -106,6 +109,17 @@ struct ControlsView: View {
                 .foregroundStyle(.secondary)
                 .lineLimit(1)
         }
+    }
+
+    private var libraryButton: some View {
+        Button {
+            showingLibrary = true
+        } label: {
+            Image(systemName: "clock.arrow.circlepath")
+                .font(.title3)
+        }
+        .buttonStyle(.borderless)
+        .accessibilityLabel("History")
     }
 
     private var settingsButton: some View {
