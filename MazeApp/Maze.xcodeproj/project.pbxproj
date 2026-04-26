@@ -150,11 +150,11 @@
 				LastUpgradeCheck = 1430;
 				TargetAttributes = {
 					232EACEE7545D1311D03D395 = {
-						DevelopmentTeam = "";
+						DevelopmentTeam = 4A42K74VZN;
 						ProvisioningStyle = Automatic;
 					};
 					EEA20B823D1434607516690A = {
-						DevelopmentTeam = "";
+						DevelopmentTeam = 4A42K74VZN;
 						ProvisioningStyle = Automatic;
 					};
 				};
@@ -235,9 +235,7 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
-				CODE_SIGNING_ALLOWED = NO;
-				CODE_SIGNING_REQUIRED = NO;
-				CODE_SIGN_IDENTITY = "";
+				CODE_SIGN_IDENTITY = "iPhone Developer";
 				ENABLE_PREVIEWS = YES;
 				INFOPLIST_FILE = Sources/MazeIOSInfo.plist;
 				IPHONEOS_DEPLOYMENT_TARGET = 18.0;
@@ -290,7 +288,7 @@
 				COPY_PHASE_STRIP = NO;
 				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
 				DEVELOPMENT_LANGUAGE = en;
-				DEVELOPMENT_TEAM = "";
+				DEVELOPMENT_TEAM = 4A42K74VZN;
 				ENABLE_NS_ASSERTIONS = NO;
 				ENABLE_STRICT_OBJC_MSGSEND = YES;
 				GCC_C_LANGUAGE_STANDARD = gnu11;
@@ -392,7 +390,7 @@
 				COPY_PHASE_STRIP = NO;
 				DEBUG_INFORMATION_FORMAT = dwarf;
 				DEVELOPMENT_LANGUAGE = en;
-				DEVELOPMENT_TEAM = "";
+				DEVELOPMENT_TEAM = 4A42K74VZN;
 				ENABLE_STRICT_OBJC_MSGSEND = YES;
 				ENABLE_TESTABILITY = YES;
 				GCC_C_LANGUAGE_STANDARD = gnu11;
@@ -427,9 +425,7 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
-				CODE_SIGNING_ALLOWED = NO;
-				CODE_SIGNING_REQUIRED = NO;
-				CODE_SIGN_IDENTITY = "";
+				CODE_SIGN_IDENTITY = "iPhone Developer";
 				ENABLE_PREVIEWS = YES;
 				INFOPLIST_FILE = Sources/MazeIOSInfo.plist;
 				IPHONEOS_DEPLOYMENT_TARGET = 18.0;

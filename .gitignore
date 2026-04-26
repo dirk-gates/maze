@@ -9,6 +9,8 @@ Package.resolved
 
 # Xcode
 DerivedData/
+build/
+MazeApp/build/
 *.xcuserdata
 *.xcodeproj/xcuserdata/
 *.xcodeproj/project.xcworkspace/xcuserdata/
