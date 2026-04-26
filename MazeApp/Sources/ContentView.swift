@@ -3,11 +3,9 @@
 //
 // Auto-fit policy: we hand the current canvas size and per-platform
 // target unit pixel size to the view model. The view model uses
-// these to refit width/height ONLY when a new generation is kicked
-// off (initial launch, Generate button, ⌘N). Orientation flips and
-// other geometry changes update the cached size but leave the
-// existing maze and dimensions alone -- the user said rotation
-// shouldn't auto-regenerate.
+// these to refit width/height whenever a generation is kicked off.
+// Orientation flips trigger a fresh generation so the new maze
+// fills the rotated screen.
 //
 // The view model is owned by MazeApp and injected here so the App
 // scene can apply `.preferredColorScheme(viewModel.schemeOverride)`
@@ -39,11 +37,11 @@ struct ContentView: View {
                         }
                     }
                     .onChange(of: geo.size) { _, new in
-                        // Cache the new size so the next user-driven
-                        // generation fits the current orientation, but
-                        // do NOT regenerate -- rotation shouldn't kick
-                        // off a new maze.
+                        // Rotate / resize: refit to the new canvas
+                        // and start a fresh generation so the maze
+                        // fills the new orientation.
                         viewModel.canvasSize = new
+                        viewModel.generate()
                     }
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
