@@ -145,15 +145,21 @@ final class MazeViewModel {
     }
 
     private func delayPerCell() async {
-        // Cubic response curve. Squaring still left the top of the
-        // slider feeling twitchy -- small movements near "fast" still
-        // produced visible speed changes. Cubing pushes the
-        // interesting fast-but-not-instant range further down the
-        // slider so the top ~25% all feels "near-instant" and isn't
-        // sensitive to small thumb movements.
-        let inverted = 1.0 - animationSpeed
-        let ms = (inverted * inverted * inverted) * 50.0
-        if ms < 0.5 { return }
+        // Logarithmic / constant-ratio response. Each equal-sized
+        // slider movement produces the same RELATIVE speed change
+        // (~3x faster per 25% of travel), so the perceived rate of
+        // change feels uniform across the whole slider range. The
+        // earlier polynomial curves clustered "near-instant" values
+        // into the top 20% of slider, so small thumb movements there
+        // jumped between very different visual feels.
+        //
+        // The very top 2% of slider is treated as instant (no delay)
+        // so users who just want to skip the animation can pin the
+        // slider to the right.
+        if animationSpeed >= 0.98 { return }
+        let maxMs = 50.0
+        let minMs = 0.5
+        let ms = maxMs * pow(minMs / maxMs, animationSpeed)
         try? await Task.sleep(nanoseconds: UInt64(ms * 1_000_000))
     }
 }
