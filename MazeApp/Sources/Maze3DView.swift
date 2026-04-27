@@ -797,11 +797,7 @@ struct Maze3DView: View {
 
     @MainActor
     private func hedgeMaterial() -> RealityKit.Material {
-        // Prefer an asset-catalog photo named "Hedge" if present;
-        // fall back to procedural leaf noise. Drop a real hedge
-        // photo into MazeApp/Sources/Assets.xcassets named "Hedge"
-        // and the next build picks it up automatically.
-        let tex = (try? TextureResource.load(named: "Hedge"))
+        let tex = loadAssetTextureWithMipmaps("Hedge")
                  ?? generateLeafTexture()
         if let tex {
             var m = PhysicallyBasedMaterial()
@@ -816,9 +812,7 @@ struct Maze3DView: View {
 
     @MainActor
     private func floorMaterial() -> RealityKit.Material {
-        // Same fallback chain as hedgeMaterial -- "Floor" image in
-        // Assets.xcassets wins over the procedural pebble texture.
-        let tex = (try? TextureResource.load(named: "Floor"))
+        let tex = loadAssetTextureWithMipmaps("Floor")
                  ?? generateFloorTexture()
         if let tex {
             var m = PhysicallyBasedMaterial()
@@ -829,6 +823,44 @@ struct Maze3DView: View {
         }
         return SimpleMaterial(color: .init(white: 0.55, alpha: 1.0),
                               roughness: 0.95, isMetallic: false)
+    }
+
+    /// Asset-catalog → CGImage → TextureResource with explicit
+    /// mipmap generation. The default load(named:) path doesn't
+    /// always allocate mipmaps, which makes high-frequency
+    /// textures (dense leaves, fine pebbles) sparkle / flicker
+    /// when the surface is sampled at distance or steep angles.
+    /// Allocating + generating all mip levels lets the GPU pick
+    /// the right LOD per pixel.
+    @MainActor
+    private func loadAssetTextureWithMipmaps(_ name: String) -> TextureResource? {
+        #if os(iOS)
+        guard let ui = UIImage(named: name), let cg = ui.cgImage else {
+            return nil
+        }
+        return try? TextureResource(
+            image  : cg,
+            options: TextureResource.CreateOptions(
+                semantic   : .color,
+                mipmapsMode: .allocateAndGenerateAll
+            )
+        )
+        #elseif os(macOS)
+        guard let ns = NSImage(named: name),
+              let cg = ns.cgImage(
+                forProposedRect: nil, context: nil, hints: nil
+              )
+        else { return nil }
+        return try? TextureResource(
+            image  : cg,
+            options: TextureResource.CreateOptions(
+                semantic   : .color,
+                mipmapsMode: .allocateAndGenerateAll
+            )
+        )
+        #else
+        return nil
+        #endif
     }
 
     /// Dark-green base with thousands of small leaf-bright specks.
@@ -870,7 +902,7 @@ struct Maze3DView: View {
         guard let cg = ctx.makeImage() else { return nil }
         return try? TextureResource(
             image  : cg,
-            options: TextureResource.CreateOptions(semantic: .color)
+            options: TextureResource.CreateOptions(semantic: .color, mipmapsMode: .allocateAndGenerateAll)
         )
     }
 
@@ -957,7 +989,7 @@ struct Maze3DView: View {
         guard let cg = ctx.makeImage() else { return nil }
         return try? TextureResource(
             image  : cg,
-            options: TextureResource.CreateOptions(semantic: .color)
+            options: TextureResource.CreateOptions(semantic: .color, mipmapsMode: .allocateAndGenerateAll)
         )
     }
 
@@ -998,7 +1030,7 @@ struct Maze3DView: View {
         guard let cg = ctx.makeImage() else { return nil }
         return try? TextureResource(
             image  : cg,
-            options: TextureResource.CreateOptions(semantic: .color)
+            options: TextureResource.CreateOptions(semantic: .color, mipmapsMode: .allocateAndGenerateAll)
         )
     }
 }
