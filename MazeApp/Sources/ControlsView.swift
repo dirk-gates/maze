@@ -69,6 +69,8 @@ struct ControlsView: View {
                 .frame(minWidth: 110)
         }
         .buttonStyle(.borderedProminent)
+        .controlSize(.large)
+        .actionShadow()
         .disabled(viewModel.isGenerating)
 
         Button {
@@ -77,7 +79,10 @@ struct ControlsView: View {
             Label("Solve", systemImage: "scope")
                 .frame(minWidth: 90)
         }
-        .buttonStyle(.bordered)
+        .buttonStyle(.borderedProminent)
+        .controlSize(.large)
+        .tint(.green)
+        .actionShadow()
         .disabled(viewModel.maze == nil || viewModel.isGenerating || viewModel.isSolving)
     }
 
@@ -144,8 +149,11 @@ struct ControlsView: View {
                 .font(.body.weight(.semibold))
                 .frame(width: tapTarget, height: tapTarget)
         }
-        .buttonStyle(.bordered)
+        .buttonStyle(.borderedProminent)
         .buttonBorderShape(.circle)
+        .controlSize(.large)
+        .tint(.gray)
+        .actionShadow()
         .accessibilityLabel("Fewer rows and columns")
         .disabled(viewModel.isGenerating)
     }
@@ -157,8 +165,11 @@ struct ControlsView: View {
                 .font(.body.weight(.semibold))
                 .frame(width: tapTarget, height: tapTarget)
         }
-        .buttonStyle(.bordered)
+        .buttonStyle(.borderedProminent)
         .buttonBorderShape(.circle)
+        .controlSize(.large)
+        .tint(.gray)
+        .actionShadow()
         .accessibilityLabel("More rows and columns")
         .disabled(viewModel.isGenerating)
     }
@@ -187,5 +198,17 @@ struct ControlsView: View {
         }
         .buttonStyle(.borderless)
         .accessibilityLabel("Settings")
+    }
+}
+
+private extension View {
+    /// Soft drop shadow used on the four big action buttons so they
+    /// lift off the translucent material bar. Tuned to be obvious in
+    /// light mode and survive in dark mode without going muddy.
+    func actionShadow() -> some View {
+        self.shadow(color: .black.opacity(0.20),
+                    radius: 4,
+                    x     : 0,
+                    y     : 2)
     }
 }
