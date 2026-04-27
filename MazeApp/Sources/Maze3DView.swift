@@ -506,17 +506,26 @@ struct Maze3DView: View {
         // in narrow corridors but well short of the fish-eye
         // distortion that creeps in past ~100°.
         cameraEntity.camera.fieldOfViewInDegrees = 90
+        // Add to scene FIRST. RealityKit's animation system needs
+        // the entity to be in a scene before move(to:) will animate;
+        // otherwise the call is a no-op and the camera just snaps
+        // when the next per-frame update hits.
+        content.add(cameraEntity)
 
         #if os(iOS)
-        // First-person: stand at the entrance cell, face into the maze.
+        // First-person: stand at the entrance cell.
         let startX = Float(maze.entrance.x) * cellSize + cellSize / 2
         let startZ = cellSize / 2
         // Max altitude scales to the maze size -- enough to see
         // the whole layout from above when fully ascended.
         let maxAlt = max(span * 0.9, 8)
+        // Pick a starting yaw that points down an open corridor so
+        // we don't open the walk facing a wall. South / east / west
+        // priority (north would walk back out the entrance).
+        let startYaw = openingYaw(forEntrance: maze.entrance)
         let p = PlayerState(
             start      : SIMD3(startX, eyeHeight, startZ),
-            yaw        : .pi,                  // face +Z (toward exit)
+            yaw        : startYaw,
             walls      : aabbs,
             width      : maze.width,
             height     : maze.height,
@@ -553,9 +562,9 @@ struct Maze3DView: View {
             translation: p.position
         )
         cameraEntity.move(
-            to        : endTransform,
-            relativeTo: nil,
-            duration  : entryDuration,
+            to            : endTransform,
+            relativeTo    : nil,
+            duration      : entryDuration,
             timingFunction: .easeInOut
         )
         Task { @MainActor in
@@ -573,7 +582,6 @@ struct Maze3DView: View {
                           from: cameraEntity.position,
                           relativeTo: nil)
         #endif
-        content.add(cameraEntity)
 
         // Per-frame update: drive the camera from PlayerState.
         // Skipped while the cinematic entry move(to:) is running
@@ -591,6 +599,29 @@ struct Maze3DView: View {
             }
         }
         #endif
+    }
+
+    /// Pick the starting yaw so we open the walk view facing an
+    /// OPEN corridor instead of a wall. Priority: south (into the
+    /// maze), then east, then west; default south. North isn't
+    /// considered -- that's back out the entrance gate.
+    /// Yaw convention here:
+    ///   yaw = 0    → facing -Z (north)
+    ///   yaw = π    → facing +Z (south)
+    ///   yaw = -π/2 → facing +X (east)
+    ///   yaw = +π/2 → facing -X (west)
+    private func openingYaw(forEntrance entrance: Coord) -> Float {
+        let here = Coord(x: entrance.x, y: 0)
+        func openTo(_ to: Coord) -> Bool {
+            guard to.x >= 0, to.x < maze.width,
+                  to.y >= 0, to.y < maze.height
+            else { return false }
+            return !maze.wall(between: here, to)
+        }
+        if openTo(Coord(x: here.x,     y: here.y + 1)) { return  .pi      }   // south
+        if openTo(Coord(x: here.x + 1, y: here.y))     { return -(.pi / 2) }   // east
+        if openTo(Coord(x: here.x - 1, y: here.y))     { return  .pi / 2  }   // west
+        return .pi
     }
 
     /// Build the solution path as a chain of thin elongated boxes
