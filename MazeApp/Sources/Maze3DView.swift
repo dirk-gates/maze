@@ -177,6 +177,7 @@ struct Maze3DView: View {
     @State private var cameraEntity   = PerspectiveCamera()
     @State private var solutionEntity = Entity()
     @State private var showingSolution = false
+    @State private var flying: Bool = false
 
     /// Cumulative drag translation last seen during a look gesture
     /// -- used to derive a per-frame delta. SwiftUI's DragGesture
@@ -191,7 +192,55 @@ struct Maze3DView: View {
             height: translation.height - lookAnchor.height
         )
         lookAnchor = translation
+        // While flying we're hovering over the maze; the look
+        // gesture is a no-op (orbit-while-flying is a future slice).
+        guard !flying else { return }
         player?.applyLookDelta(delta)
+    }
+
+    /// Toggle hover-overhead vs. walk-eye-height. The fly button
+    /// animates the camera to a tilted overhead view; pressing it
+    /// again flies back down to the player's exact eye position
+    /// and orientation. Movement / look input is frozen during
+    /// the fly state so it doesn't fight the animation.
+    private func toggleFly() {
+        guard let player else { return }
+        let mazeW = Float(maze.width)  * cellSize
+        let mazeH = Float(maze.height) * cellSize
+        let span  = max(mazeW, mazeH)
+
+        if flying {
+            // Descend back to the player's current eye position +
+            // orientation. We keep `flying = true` for the duration
+            // of the animation so the per-frame update doesn't
+            // overwrite the move-to interpolation. Flip the flag
+            // when the move finishes.
+            let qYaw   = simd_quatf(angle: player.yaw,   axis: [0, 1, 0])
+            let qPitch = simd_quatf(angle: player.pitch, axis: [1, 0, 0])
+            let target = Transform(
+                scale      : .one,
+                rotation   : qYaw * qPitch,
+                translation: player.position
+            )
+            cameraEntity.move(to: target, relativeTo: nil, duration: 1.0)
+            Task {
+                try? await Task.sleep(nanoseconds: 1_050_000_000)
+                self.flying = false
+            }
+        } else {
+            // Ascend to a tilted overhead view of the whole maze.
+            flying = true
+            let from = SIMD3<Float>(mazeW / 2, span * 0.95, mazeH + span * 0.05)
+            let look = SIMD3<Float>(mazeW / 2, 0, mazeH / 2)
+            // Use a placeholder entity to compute the look-at
+            // transform without doing the quaternion math by hand.
+            let placeholder = Entity()
+            placeholder.position = from
+            placeholder.look(at: look, from: from, relativeTo: nil)
+            cameraEntity.move(to: placeholder.transform,
+                              relativeTo: nil,
+                              duration  : 1.0)
+        }
     }
 
     var body: some View {
@@ -212,11 +261,12 @@ struct Maze3DView: View {
             controlsOverlay
             #endif
 
-            // Top bar: close on the left, Solve toggle on the right.
+            // Top bar: close on the left, Fly + Solve on the right.
             VStack {
-                HStack {
+                HStack(spacing: 0) {
                     closeButton
                     Spacer()
+                    flyToggle
                     solveToggle
                 }
                 Spacer()
@@ -326,15 +376,15 @@ struct Maze3DView: View {
         content.add(cameraEntity)
 
         // Per-frame update: drive the camera from PlayerState.
+        // Skipped while flying -- the move(to:duration:) animation
+        // is in flight and we'd be fighting it for the transform.
         #if os(iOS)
         _ = content.subscribe(to: SceneEvents.Update.self) { event in
             Task { @MainActor in
                 guard let player = self.player else { return }
+                guard !self.flying else { return }
                 player.tick(dt: Float(event.deltaTime))
                 self.cameraEntity.position = player.position
-                // Yaw around Y, then pitch around the resulting
-                // local X. Order matters: pitch * yaw lets you
-                // look up/down WITHOUT introducing roll.
                 let qYaw   = simd_quatf(angle: player.yaw,   axis: [0, 1, 0])
                 let qPitch = simd_quatf(angle: player.pitch, axis: [1, 0, 0])
                 self.cameraEntity.orientation = qYaw * qPitch
@@ -461,6 +511,25 @@ struct Maze3DView: View {
                 .padding()
         }
         .accessibilityLabel("Close 3D view")
+    }
+
+    /// Top-right fly toggle. Lifts the camera to a tilted
+    /// overhead view of the whole maze; tapping again descends
+    /// back to the player's position + orientation.
+    private var flyToggle: some View {
+        Button {
+            toggleFly()
+        } label: {
+            Image(systemName: flying
+                  ? "arrow.down.to.line.compact"
+                  : "arrow.up.to.line.compact")
+                .font(.largeTitle)
+                .padding(10)
+                .background(Circle().fill(.black.opacity(0.55)))
+                .foregroundStyle(flying ? .yellow : .white)
+                .padding()
+        }
+        .accessibilityLabel(flying ? "Descend" : "Fly up")
     }
 
     /// Top-right toggle that shows / hides the solution-path
