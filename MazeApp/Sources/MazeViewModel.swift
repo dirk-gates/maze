@@ -171,10 +171,33 @@ final class MazeViewModel {
             lookAheadDepth: lookAheadDepth,
             seed          : seed
         )
-        let stream = Generator(params).generate()
+        let stream    = Generator(params).generate()
+        // Snapshot once so a mid-run slider tweak doesn't switch
+        // modes partway through. The "instant" path skips per-event
+        // SwiftUI churn, which is what dominates total time on
+        // large mazes -- thousands of @Observable mutations cost
+        // far more than the carving algorithm itself.
+        let isInstant = animationSpeed >= instantThreshold
 
         for await event in stream {
             if Task.isCancelled { break }
+
+            if isInstant {
+                switch event {
+                case .attempt(let n):
+                    attemptCount = n
+                case .finished(let m):
+                    populateRenderState(from: m)
+                    maze      = m
+                    statsLine = "\(carvedCells.count) cells, "
+                              + "solution \(m.solution?.count ?? 0)"
+                    appendToLibrary(m, seed: seed)
+                default:
+                    break
+                }
+                continue
+            }
+
             await delayPerCell()
 
             switch event {
@@ -203,14 +226,54 @@ final class MazeViewModel {
                 maze      = m
                 statsLine = "\(carvedCells.count) cells, "
                           + "solution \(m.solution?.count ?? 0)"
-                library.append(SavedMaze(
-                    seed          : seed,
-                    width         : width,
-                    height        : height,
-                    lookAheadDepth: lookAheadDepth
-                ))
+                appendToLibrary(m, seed: seed)
             }
         }
+    }
+
+    /// Fill carvedCells, openWalls, entranceGate, exitGate from a
+    /// finished maze in one batch. Used by the instant-mode fast
+    /// path so we trigger a single render pass instead of one per
+    /// carved cell.
+    private func populateRenderState(from m: Maze) {
+        var cells = Set<Coord>()
+        var walls = Set<MazeKit.Edge>()
+        cells.reserveCapacity(m.width * m.height)
+        for y in 0..<m.height {
+            for x in 0..<m.width {
+                let here = Coord(x: x, y: y)
+                cells.insert(here)
+                if x + 1 < m.width {
+                    let east = Coord(x: x + 1, y: y)
+                    if !m.wall(between: here, east) {
+                        walls.insert(MazeKit.Edge(here, east))
+                    }
+                }
+                if y + 1 < m.height {
+                    let south = Coord(x: x, y: y + 1)
+                    if !m.wall(between: here, south) {
+                        walls.insert(MazeKit.Edge(here, south))
+                    }
+                }
+            }
+        }
+        carvedCells  = cells
+        openWalls    = walls
+        entranceGate = m.entrance
+        exitGate     = m.exit
+    }
+
+    private func appendToLibrary(_ m: Maze, seed: UInt64) {
+        let id    = UUID()
+        let thumb = MazeThumbnail.write(maze: m, id: id)
+        library.append(SavedMaze(
+            id               : id,
+            seed             : seed,
+            width            : width,
+            height           : height,
+            lookAheadDepth   : lookAheadDepth,
+            thumbnailFilename: thumb
+        ))
     }
 
     private func runSolve() async {
@@ -237,6 +300,11 @@ final class MazeViewModel {
         }
     }
 
+    /// Slider position at and above which we treat generation as
+    /// "skip animation" -- no per-cell delay AND we collapse the
+    /// per-event UI churn into one batch update at .finished.
+    fileprivate let instantThreshold = 0.95
+
     private func delayPerCell() async {
         // Slider response: log curve over a wider range (150ms..1ms),
         // with the top 5% mapped to instant. The wider range gives
@@ -245,7 +313,6 @@ final class MazeViewModel {
         // compute is heavy (e.g. high look-ahead), and the narrower
         // instant zone leaves more taps separating "very fast" from
         // "skip animation".
-        let instantThreshold = 0.95
         if animationSpeed >= instantThreshold { return }
         let t     = animationSpeed / instantThreshold
         let maxMs = 150.0

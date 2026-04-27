@@ -21,32 +21,55 @@ final class MazeLibrary {
 
     /// Insert at the head, dedupe by (seed, dims, look-ahead) so
     /// re-rolling the same maze doesn't pile duplicates, then prune
-    /// to maxEntries and persist.
+    /// to maxEntries and persist. Evicted entries' thumbnails are
+    /// deleted from disk to keep the cache tidy.
     func append(_ maze: SavedMaze) {
-        mazes.removeAll {
+        let dupes = mazes.filter {
                $0.seed           == maze.seed
             && $0.width          == maze.width
             && $0.height         == maze.height
             && $0.lookAheadDepth == maze.lookAheadDepth
         }
+        for d in dupes {
+            if let f = d.thumbnailFilename { MazeThumbnail.delete(filename: f) }
+        }
+        mazes.removeAll { d in dupes.contains { $0.id == d.id } }
         mazes.insert(maze, at: 0)
         if mazes.count > maxEntries {
+            for evicted in mazes.suffix(mazes.count - maxEntries) {
+                if let f = evicted.thumbnailFilename {
+                    MazeThumbnail.delete(filename: f)
+                }
+            }
             mazes.removeLast(mazes.count - maxEntries)
         }
         save()
     }
 
     func remove(at offsets: IndexSet) {
+        for i in offsets {
+            if let f = mazes[i].thumbnailFilename {
+                MazeThumbnail.delete(filename: f)
+            }
+        }
         mazes.remove(atOffsets: offsets)
         save()
     }
 
     func remove(_ maze: SavedMaze) {
+        if let f = maze.thumbnailFilename {
+            MazeThumbnail.delete(filename: f)
+        }
         mazes.removeAll { $0.id == maze.id }
         save()
     }
 
     func clear() {
+        for m in mazes {
+            if let f = m.thumbnailFilename {
+                MazeThumbnail.delete(filename: f)
+            }
+        }
         mazes.removeAll()
         save()
     }

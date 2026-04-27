@@ -64,7 +64,8 @@ struct LibraryView: View {
     }
 
     private func row(for saved: SavedMaze) -> some View {
-        HStack(alignment: .firstTextBaseline) {
+        HStack(spacing: 12) {
+            thumbnail(for: saved)
             VStack(alignment: .leading, spacing: 4) {
                 Text("\(saved.width) × \(saved.height)")
                     .font(.headline.monospacedDigit())
@@ -77,7 +78,28 @@ struct LibraryView: View {
                 .font(.caption)
                 .foregroundStyle(.secondary)
         }
-        .padding(.vertical, 2)
+        .padding(.vertical, 4)
+    }
+
+    @ViewBuilder
+    private func thumbnail(for saved: SavedMaze) -> some View {
+        let placeholder = RoundedRectangle(cornerRadius: 6)
+            .fill(.tertiary)
+            .frame(width: 56, height: 56)
+        if let name = saved.thumbnailFilename,
+           let img  = MazeThumbnail.image(filename: name) {
+            img.resizable()
+                .interpolation(.none)
+                .aspectRatio(contentMode: .fit)
+                .frame(width: 56, height: 56)
+                .clipShape(RoundedRectangle(cornerRadius: 6))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 6)
+                        .stroke(.separator, lineWidth: 0.5)
+                )
+        } else {
+            placeholder
+        }
     }
 
     private func metadataLine(for saved: SavedMaze) -> String {

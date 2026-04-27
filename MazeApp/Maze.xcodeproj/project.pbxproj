@@ -7,6 +7,7 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		0C431E8BD52784D4D301FF84 /* MazeThumbnail.swift in Sources */ = {isa = PBXBuildFile; fileRef = DA319A6F9C4E839DAB447869 /* MazeThumbnail.swift */; };
 		0C8C23CB956A7348211F05D6 /* MazeIOSInfo.plist in Resources */ = {isa = PBXBuildFile; fileRef = A1A25A18D1719A534A4B32BF /* MazeIOSInfo.plist */; };
 		283CB5C325A1378A7CEBF357 /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5FAE2DBE3D925890761E18EB /* ContentView.swift */; };
 		2C7C6D0C1A0FC3AB532F248C /* MazeApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 176C90ADADDE3F85A9703573 /* MazeApp.swift */; };
@@ -19,6 +20,7 @@
 		7D8F59815C83F6268FAED080 /* LibraryView.swift in Sources */ = {isa = PBXBuildFile; fileRef = EF528CA53282296DA9B9AD9B /* LibraryView.swift */; };
 		822C3DC243F11D0C66DDD8CA /* MazeKit in Frameworks */ = {isa = PBXBuildFile; productRef = 6EE3F2CF76E80E9BF5280643 /* MazeKit */; };
 		827D279B59DEA18478BD2C53 /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0B2D8E4F3F37FD654174C7A5 /* SettingsView.swift */; };
+		8AED1181DE2731587182812D /* MazeThumbnail.swift in Sources */ = {isa = PBXBuildFile; fileRef = DA319A6F9C4E839DAB447869 /* MazeThumbnail.swift */; };
 		8F264280CE94B5D5032BA603 /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0B2D8E4F3F37FD654174C7A5 /* SettingsView.swift */; };
 		9615881DD8CB1299FE58EB57 /* MazeViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = B34A95A3838C50BEF62F38BB /* MazeViewModel.swift */; };
 		A895B8B4C4A4D3C65F9A4F0C /* ControlsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = CB377560EE925ED1788C3802 /* ControlsView.swift */; };
@@ -48,6 +50,7 @@
 		B34A95A3838C50BEF62F38BB /* MazeViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MazeViewModel.swift; sourceTree = "<group>"; };
 		BA25421C2445ADAABEF14271 /* Maze.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Maze.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		CB377560EE925ED1788C3802 /* ControlsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ControlsView.swift; sourceTree = "<group>"; };
+		DA319A6F9C4E839DAB447869 /* MazeThumbnail.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MazeThumbnail.swift; sourceTree = "<group>"; };
 		DFB505CD683298BBC716DA0B /* MazeLibrary.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MazeLibrary.swift; sourceTree = "<group>"; };
 		EF528CA53282296DA9B9AD9B /* LibraryView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LibraryView.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
@@ -84,6 +87,7 @@
 				8DFC2C09CEDADDA5C197B104 /* MazeCanvasView.swift */,
 				A1A25A18D1719A534A4B32BF /* MazeIOSInfo.plist */,
 				DFB505CD683298BBC716DA0B /* MazeLibrary.swift */,
+				DA319A6F9C4E839DAB447869 /* MazeThumbnail.swift */,
 				B34A95A3838C50BEF62F38BB /* MazeViewModel.swift */,
 				0B2D8E4F3F37FD654174C7A5 /* SettingsView.swift */,
 				1027CC7B1CBC49294328C9CD /* Theme.swift */,
@@ -234,6 +238,7 @@
 				FC6BF5A99F9C3536E12894E7 /* MazeApp.swift in Sources */,
 				B5BAB0AE8AD44611DB0CEA84 /* MazeCanvasView.swift in Sources */,
 				558FC33ABAF541B68AF19A8E /* MazeLibrary.swift in Sources */,
+				0C431E8BD52784D4D301FF84 /* MazeThumbnail.swift in Sources */,
 				9615881DD8CB1299FE58EB57 /* MazeViewModel.swift in Sources */,
 				8F264280CE94B5D5032BA603 /* SettingsView.swift in Sources */,
 				C6DCF4719B588A4B7A0CE968 /* Theme.swift in Sources */,
@@ -251,6 +256,7 @@
 				2C7C6D0C1A0FC3AB532F248C /* MazeApp.swift in Sources */,
 				7A3CE2B704580455C9EE9DFE /* MazeCanvasView.swift in Sources */,
 				CE590B3C6E793C7229973E24 /* MazeLibrary.swift in Sources */,
+				8AED1181DE2731587182812D /* MazeThumbnail.swift in Sources */,
 				333910A0C2D5387BA96C3BAA /* MazeViewModel.swift in Sources */,
 				827D279B59DEA18478BD2C53 /* SettingsView.swift in Sources */,
 				C417CF6DA7CBACA427BFBB73 /* Theme.swift in Sources */,
