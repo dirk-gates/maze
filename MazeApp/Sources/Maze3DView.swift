@@ -40,64 +40,112 @@ private struct WallAABB {
 @MainActor
 @Observable
 private final class PlayerState {
-    var position : SIMD3<Float>
-    var yaw      : Float            // radians, around +Y; 0 = facing -Z
-    var pitch    : Float = 0        // radians, around X; clamped ±1.4
-    var moveInput: SIMD2<Float> = .zero  // x = strafe, y = forward
+    var position : SIMD3<Float>     // .y already includes altitudeOffset
+    var yaw      : Float
+    var pitch    : Float = 0
+    var moveInput: SIMD2<Float> = .zero
     var won      : Bool         = false
+
+    /// Current camera height ABOVE eye-height. 0 = walking on the
+    /// floor; positive = hovering. The camera Y is always
+    /// `eyeHeight + altitudeOffset`.
+    var altitudeOffset: Float = 0
+    /// Lerp target for `altitudeOffset`; tick() interpolates the
+    /// current value toward it so altitude changes feel smooth.
+    var targetAltitude: Float = 0
+
+    /// True when we're high enough to be over the top of the
+    /// hedges -- collision is disabled in this state so the player
+    /// can fly across the maze without being walled in.
+    var isFlying: Bool { altitudeOffset > flyClearance }
+
+    let maxAltitude  : Float
+    private let flyClearance: Float = wallHeight - eyeHeight + 0.1
 
     private let walls       : [WallAABB]
     private let exitCellX   : Int
     private let exitCellZ   : Int
     private let playerRadius: Float = 0.22
-    private let moveSpeed   : Float = 2.6     // world units / sec
+    private let moveSpeed   : Float = 2.6
+    private let altitudeRate: Float = 4.0   // 1/seconds: ~0.25 s to converge
 
     init(start: SIMD3<Float>, yaw: Float,
-         walls: [WallAABB], exitCellX: Int, exitCellZ: Int)
+         walls: [WallAABB], exitCellX: Int, exitCellZ: Int,
+         maxAltitude: Float)
     {
-        self.position  = start
-        self.yaw       = yaw
-        self.walls     = walls
-        self.exitCellX = exitCellX
-        self.exitCellZ = exitCellZ
+        self.position    = start
+        self.yaw         = yaw
+        self.walls       = walls
+        self.exitCellX   = exitCellX
+        self.exitCellZ   = exitCellZ
+        self.maxAltitude = maxAltitude
     }
 
-    /// Apply a look-area drag delta (in points) to yaw / pitch.
-    /// Called from the right-side touch overlay each frame the
-    /// gesture changes -- PUBG-style: thumb can drop anywhere on
-    /// the right side and drag to rotate. Sensitivity is in
-    /// radians-per-point so it's resolution-independent.
     func applyLookDelta(_ delta: CGSize) {
         let sens: Float = 0.005
         yaw   -= Float(delta.width)  * sens
         pitch -= Float(delta.height) * sens
-        // Clamp pitch so the camera never flips upside-down or
-        // looks straight up/down (which feels disorienting in a
-        // first-person maze view).
         pitch = max(-1.4, min(1.4, pitch))
     }
 
-    /// Apply one frame of movement input at `dt` seconds.
+    /// Step the altitude target up / down. Caller usually calls
+    /// these from button taps; the actual altitude lerps toward
+    /// the target across multiple ticks.
+    func raiseAltitude(by step: Float) {
+        targetAltitude = min(maxAltitude, targetAltitude + step)
+    }
+    func lowerAltitude(by step: Float) {
+        targetAltitude = max(0, targetAltitude - step)
+    }
+
+    /// Apply one frame of movement + altitude at `dt` seconds.
     func tick(dt: Float) {
         guard !won else { return }
+
+        // Smooth altitude lerp toward the target the buttons set.
+        let beforeFlying = isFlying
+        let dy = targetAltitude - altitudeOffset
+        altitudeOffset += dy * min(1, dt * altitudeRate)
+
         let f = SIMD3<Float>(-sin(yaw), 0, -cos(yaw))
         let r = SIMD3<Float>( cos(yaw), 0, -sin(yaw))
         let dxz = (r * moveInput.x + f * moveInput.y) * moveSpeed * dt
 
-        // Axis-separated move so we slide along walls instead of
-        // sticking when a diagonal would clip a corner.
         var p = position
-        let nx = SIMD3(p.x + dxz.x, eyeHeight, p.z)
-        if !collides(at: nx) { p.x = nx.x }
-        let nz = SIMD3(p.x, eyeHeight, p.z + dxz.z)
-        if !collides(at: nz) { p.z = nz.z }
-        position = SIMD3(p.x, eyeHeight, p.z)
+        if isFlying {
+            // Hover only -- the joystick is ignored above the hedge.
+            // You go up, look around, come back down, and walk.
+            // No horizontal drift.
+        } else {
+            // On (or near) the ground: axis-separated collision.
+            let nx = SIMD3(p.x + dxz.x, eyeHeight, p.z)
+            if !collides(at: nx) { p.x = nx.x }
+            let nz = SIMD3(p.x, eyeHeight, p.z + dxz.z)
+            if !collides(at: nz) { p.z = nz.z }
+        }
+        p.y = eyeHeight + altitudeOffset
 
-        // Win condition: stand on the exit cell.
-        let cx = Int(position.x / cellSize)
-        let cz = Int(position.z / cellSize)
-        if cx == exitCellX && cz == exitCellZ {
-            won = true
+        // Landing: if we just dropped below fly clearance and our
+        // XZ position is inside a wall, snap to the center of the
+        // current cell so collision doesn't trap us.
+        if beforeFlying && !isFlying {
+            let test = SIMD3(p.x, eyeHeight, p.z)
+            if collides(at: test) {
+                let cx = (floor(p.x / cellSize) + 0.5) * cellSize
+                let cz = (floor(p.z / cellSize) + 0.5) * cellSize
+                p.x = cx
+                p.z = cz
+            }
+        }
+        position = p
+
+        // Win condition: stand on the exit cell while NOT flying.
+        if !isFlying {
+            let cx = Int(position.x / cellSize)
+            let cz = Int(position.z / cellSize)
+            if cx == exitCellX && cz == exitCellZ {
+                won = true
+            }
         }
     }
 
@@ -177,7 +225,6 @@ struct Maze3DView: View {
     @State private var cameraEntity   = PerspectiveCamera()
     @State private var solutionEntity = Entity()
     @State private var showingSolution = false
-    @State private var flying: Bool = false
 
     /// Cumulative drag translation last seen during a look gesture
     /// -- used to derive a per-frame delta. SwiftUI's DragGesture
@@ -192,55 +239,9 @@ struct Maze3DView: View {
             height: translation.height - lookAnchor.height
         )
         lookAnchor = translation
-        // While flying we're hovering over the maze; the look
-        // gesture is a no-op (orbit-while-flying is a future slice).
-        guard !flying else { return }
+        // Look gesture works at every altitude -- on the ground
+        // and while hovering you can still pan to look around.
         player?.applyLookDelta(delta)
-    }
-
-    /// Toggle hover-overhead vs. walk-eye-height. The fly button
-    /// animates the camera to a tilted overhead view; pressing it
-    /// again flies back down to the player's exact eye position
-    /// and orientation. Movement / look input is frozen during
-    /// the fly state so it doesn't fight the animation.
-    private func toggleFly() {
-        guard let player else { return }
-        let mazeW = Float(maze.width)  * cellSize
-        let mazeH = Float(maze.height) * cellSize
-        let span  = max(mazeW, mazeH)
-
-        if flying {
-            // Descend back to the player's current eye position +
-            // orientation. We keep `flying = true` for the duration
-            // of the animation so the per-frame update doesn't
-            // overwrite the move-to interpolation. Flip the flag
-            // when the move finishes.
-            let qYaw   = simd_quatf(angle: player.yaw,   axis: [0, 1, 0])
-            let qPitch = simd_quatf(angle: player.pitch, axis: [1, 0, 0])
-            let target = Transform(
-                scale      : .one,
-                rotation   : qYaw * qPitch,
-                translation: player.position
-            )
-            cameraEntity.move(to: target, relativeTo: nil, duration: 1.0)
-            Task {
-                try? await Task.sleep(nanoseconds: 1_050_000_000)
-                self.flying = false
-            }
-        } else {
-            // Ascend to a tilted overhead view of the whole maze.
-            flying = true
-            let from = SIMD3<Float>(mazeW / 2, span * 0.95, mazeH + span * 0.05)
-            let look = SIMD3<Float>(mazeW / 2, 0, mazeH / 2)
-            // Use a placeholder entity to compute the look-at
-            // transform without doing the quaternion math by hand.
-            let placeholder = Entity()
-            placeholder.position = from
-            placeholder.look(at: look, from: from, relativeTo: nil)
-            cameraEntity.move(to: placeholder.transform,
-                              relativeTo: nil,
-                              duration  : 1.0)
-        }
     }
 
     var body: some View {
@@ -261,12 +262,15 @@ struct Maze3DView: View {
             controlsOverlay
             #endif
 
-            // Top bar: close on the left, Fly + Solve on the right.
+            // Top bar: close on the left, altitude steppers + Solve
+            // on the right. Down on the inside, up on the outside,
+            // so the pair reads as "the up arrow lifts you higher".
             VStack {
                 HStack(spacing: 0) {
                     closeButton
                     Spacer()
-                    flyToggle
+                    flyDownButton
+                    flyUpButton
                     solveToggle
                 }
                 Spacer()
@@ -353,12 +357,16 @@ struct Maze3DView: View {
         // First-person: stand at the entrance cell, face into the maze.
         let startX = Float(maze.entrance.x) * cellSize + cellSize / 2
         let startZ = cellSize / 2
+        // Max altitude scales to the maze size -- enough to see
+        // the whole layout from above when fully ascended.
+        let maxAlt = max(span * 0.9, 8)
         let p = PlayerState(
-            start: SIMD3(startX, eyeHeight, startZ),
-            yaw  : .pi,                         // face +Z (toward exit)
-            walls: aabbs,
-            exitCellX: maze.exit.x,
-            exitCellZ: maze.height - 1
+            start      : SIMD3(startX, eyeHeight, startZ),
+            yaw        : .pi,                  // face +Z (toward exit)
+            walls      : aabbs,
+            exitCellX  : maze.exit.x,
+            exitCellZ  : maze.height - 1,
+            maxAltitude: maxAlt
         )
         player = p
         cameraEntity.position    = p.position
@@ -376,13 +384,12 @@ struct Maze3DView: View {
         content.add(cameraEntity)
 
         // Per-frame update: drive the camera from PlayerState.
-        // Skipped while flying -- the move(to:duration:) animation
-        // is in flight and we'd be fighting it for the transform.
+        // Continuous -- altitude lerps toward target inside tick()
+        // so we always want the camera to follow the lerp.
         #if os(iOS)
         _ = content.subscribe(to: SceneEvents.Update.self) { event in
             Task { @MainActor in
                 guard let player = self.player else { return }
-                guard !self.flying else { return }
                 player.tick(dt: Float(event.deltaTime))
                 self.cameraEntity.position = player.position
                 let qYaw   = simd_quatf(angle: player.yaw,   axis: [0, 1, 0])
@@ -513,24 +520,47 @@ struct Maze3DView: View {
         .accessibilityLabel("Close 3D view")
     }
 
-    /// Top-right fly toggle. Lifts the camera to a tilted
-    /// overhead view of the whole maze; tapping again descends
-    /// back to the player's position + orientation.
-    private var flyToggle: some View {
-        Button {
-            toggleFly()
+    /// Step the camera up by ~1.25× hedge height. Tap repeatedly
+    /// to climb -- starts at ground, max is the maze span (a near-
+    /// bird's-eye view). Look-yaw + pitch stay live throughout.
+    private var flyUpButton: some View {
+        let atMax = (player?.targetAltitude ?? 0) >= (player?.maxAltitude ?? 0) - 0.01
+        return Button {
+            player?.raiseAltitude(by: flyStep)
         } label: {
-            Image(systemName: flying
-                  ? "arrow.down.to.line.compact"
-                  : "arrow.up.to.line.compact")
+            Image(systemName: "arrow.up")
                 .font(.largeTitle)
                 .padding(10)
                 .background(Circle().fill(.black.opacity(0.55)))
-                .foregroundStyle(flying ? .yellow : .white)
-                .padding()
+                .foregroundStyle(.white)
+                .padding(.vertical)
         }
-        .accessibilityLabel(flying ? "Descend" : "Fly up")
+        .disabled(atMax)
+        .opacity(atMax ? 0.4 : 1.0)
+        .accessibilityLabel("Fly up")
     }
+
+    /// Step the camera down. At ground level the button disables.
+    private var flyDownButton: some View {
+        let atGround = (player?.targetAltitude ?? 0) <= 0.01
+        return Button {
+            player?.lowerAltitude(by: flyStep)
+        } label: {
+            Image(systemName: "arrow.down")
+                .font(.largeTitle)
+                .padding(10)
+                .background(Circle().fill(.black.opacity(0.55)))
+                .foregroundStyle(.white)
+                .padding(.vertical)
+        }
+        .disabled(atGround)
+        .opacity(atGround ? 0.4 : 1.0)
+        .accessibilityLabel("Fly down")
+    }
+
+    /// World units per altitude tap. Tuned so 1 tap = ~1.25× hedge
+    /// (puts you just clear of the hedges from the ground).
+    private let flyStep: Float = 2.5
 
     /// Top-right toggle that shows / hides the solution-path
     /// overlay. Tint cyan when active to mirror the line color.
