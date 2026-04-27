@@ -10,10 +10,12 @@
 		0C431E8BD52784D4D301FF84 /* MazeThumbnail.swift in Sources */ = {isa = PBXBuildFile; fileRef = DA319A6F9C4E839DAB447869 /* MazeThumbnail.swift */; };
 		14909EB6C7991FAF48D4EFE3 /* Maze3DView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6AE250F04E1A761FD43AE57A /* Maze3DView.swift */; };
 		283CB5C325A1378A7CEBF357 /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5FAE2DBE3D925890761E18EB /* ContentView.swift */; };
+		2B6266FFAD382485666702D7 /* MazeTopDownView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9C38BADAE6F02C07507E2BF4 /* MazeTopDownView.swift */; };
 		2C7C6D0C1A0FC3AB532F248C /* MazeApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 176C90ADADDE3F85A9703573 /* MazeApp.swift */; };
 		333910A0C2D5387BA96C3BAA /* MazeViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = B34A95A3838C50BEF62F38BB /* MazeViewModel.swift */; };
 		558FC33ABAF541B68AF19A8E /* MazeLibrary.swift in Sources */ = {isa = PBXBuildFile; fileRef = DFB505CD683298BBC716DA0B /* MazeLibrary.swift */; };
 		574B0B6A85E27D269DA48A7F /* MazeKit in Frameworks */ = {isa = PBXBuildFile; productRef = 22479930A1FC57429B130F71 /* MazeKit */; };
+		6535AE722F342AACF787716D /* MazeTopDownView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9C38BADAE6F02C07507E2BF4 /* MazeTopDownView.swift */; };
 		69FDC46D42EE322BCFCCC69C /* Haptics.swift in Sources */ = {isa = PBXBuildFile; fileRef = 825562C7B3462A1BA11F4A78 /* Haptics.swift */; };
 		6E6E25DC75A28F2845A39C6A /* Haptics.swift in Sources */ = {isa = PBXBuildFile; fileRef = 825562C7B3462A1BA11F4A78 /* Haptics.swift */; };
 		7A3CE2B704580455C9EE9DFE /* MazeCanvasView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8DFC2C09CEDADDA5C197B104 /* MazeCanvasView.swift */; };
@@ -48,6 +50,7 @@
 		6C59E9A4B8A3B61392A1041A /* MazeIOS.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = MazeIOS.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		825562C7B3462A1BA11F4A78 /* Haptics.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Haptics.swift; sourceTree = "<group>"; };
 		8DFC2C09CEDADDA5C197B104 /* MazeCanvasView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MazeCanvasView.swift; sourceTree = "<group>"; };
+		9C38BADAE6F02C07507E2BF4 /* MazeTopDownView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MazeTopDownView.swift; sourceTree = "<group>"; };
 		B34A95A3838C50BEF62F38BB /* MazeViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MazeViewModel.swift; sourceTree = "<group>"; };
 		BA25421C2445ADAABEF14271 /* Maze.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Maze.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		CB377560EE925ED1788C3802 /* ControlsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ControlsView.swift; sourceTree = "<group>"; };
@@ -89,6 +92,7 @@
 				8DFC2C09CEDADDA5C197B104 /* MazeCanvasView.swift */,
 				DFB505CD683298BBC716DA0B /* MazeLibrary.swift */,
 				DA319A6F9C4E839DAB447869 /* MazeThumbnail.swift */,
+				9C38BADAE6F02C07507E2BF4 /* MazeTopDownView.swift */,
 				B34A95A3838C50BEF62F38BB /* MazeViewModel.swift */,
 				0B2D8E4F3F37FD654174C7A5 /* SettingsView.swift */,
 				1027CC7B1CBC49294328C9CD /* Theme.swift */,
@@ -240,6 +244,7 @@
 				B5BAB0AE8AD44611DB0CEA84 /* MazeCanvasView.swift in Sources */,
 				558FC33ABAF541B68AF19A8E /* MazeLibrary.swift in Sources */,
 				0C431E8BD52784D4D301FF84 /* MazeThumbnail.swift in Sources */,
+				2B6266FFAD382485666702D7 /* MazeTopDownView.swift in Sources */,
 				9615881DD8CB1299FE58EB57 /* MazeViewModel.swift in Sources */,
 				8F264280CE94B5D5032BA603 /* SettingsView.swift in Sources */,
 				C6DCF4719B588A4B7A0CE968 /* Theme.swift in Sources */,
@@ -259,6 +264,7 @@
 				7A3CE2B704580455C9EE9DFE /* MazeCanvasView.swift in Sources */,
 				CE590B3C6E793C7229973E24 /* MazeLibrary.swift in Sources */,
 				8AED1181DE2731587182812D /* MazeThumbnail.swift in Sources */,
+				6535AE722F342AACF787716D /* MazeTopDownView.swift in Sources */,
 				333910A0C2D5387BA96C3BAA /* MazeViewModel.swift in Sources */,
 				827D279B59DEA18478BD2C53 /* SettingsView.swift in Sources */,
 				C417CF6DA7CBACA427BFBB73 /* Theme.swift in Sources */,
