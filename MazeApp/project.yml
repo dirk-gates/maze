@@ -39,12 +39,7 @@ targets:
         PRODUCT_BUNDLE_IDENTIFIER: com.dirkgates.Maze
         PRODUCT_NAME: Maze
         ENABLE_HARDENED_RUNTIME: YES
-        # iCloud sync is iOS-only for now -- enabling it on macOS
-        # would require registering this Mac in the dev portal and
-        # full code signing instead of ad-hoc. Mac runs against
-        # local-only library; sync between iPhone <-> iPad still
-        # works via the entitlement on the iOS target.
-        CODE_SIGN_IDENTITY: "-"
+        CODE_SIGN_ENTITLEMENTS: Sources/Maze.entitlements
         ENABLE_PREVIEWS: YES
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
         ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME: AccentColor
