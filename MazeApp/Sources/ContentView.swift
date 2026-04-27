@@ -29,11 +29,6 @@ struct ContentView: View {
         VStack(spacing: 0) {
             GeometryReader { geo in
                 MazeCanvasView(viewModel: viewModel, theme: theme)
-                    .overlay(alignment: .topTrailing) {
-                        ZoomControls(viewModel: viewModel)
-                            .padding(.trailing, 12)
-                            .padding(.top    , 12)
-                    }
                     .onAppear {
                         if !didInitialLaunch {
                             viewModel.targetUnitPx = targetUnitPixels()

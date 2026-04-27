@@ -31,6 +31,7 @@ struct ControlsView: View {
             buttons
             speedControl.frame(minWidth: 200, maxWidth: .infinity)
             stats
+            zoomControls
             libraryButton
             settingsButton
         }
@@ -42,6 +43,7 @@ struct ControlsView: View {
                 buttons
                 Spacer()
                 stats
+                zoomControls
                 libraryButton
                 settingsButton
             }
@@ -109,6 +111,30 @@ struct ControlsView: View {
                 .foregroundStyle(.secondary)
                 .lineLimit(1)
         }
+    }
+
+    /// Each zoom tap multiplies targetUnitPx by this factor (or 1/this).
+    /// 1.2 = ~20% per tap, ~3 taps to roughly halve/double cell count.
+    private let zoomStep = 1.2
+
+    @ViewBuilder
+    private var zoomControls: some View {
+        HStack(spacing: 4) {
+            Button { viewModel.zoom(by: 1.0 / zoomStep) } label: {
+                Image(systemName: "minus.magnifyingglass")
+                    .font(.title3)
+            }
+            .buttonStyle(.borderless)
+            .accessibilityLabel("Zoom out")
+
+            Button { viewModel.zoom(by: zoomStep) } label: {
+                Image(systemName: "plus.magnifyingglass")
+                    .font(.title3)
+            }
+            .buttonStyle(.borderless)
+            .accessibilityLabel("Zoom in")
+        }
+        .disabled(viewModel.isGenerating)
     }
 
     private var libraryButton: some View {
