@@ -43,8 +43,13 @@ private final class PlayerState {
     var position : SIMD3<Float>     // .y already includes altitudeOffset
     var yaw      : Float
     var pitch    : Float = 0
-    var moveInput: SIMD2<Float> = .zero
     var won      : Bool         = false
+
+    /// Target world (X, Z) for the in-progress cell-by-cell step.
+    /// nil = stationary. Replaced by the next step() call -- so
+    /// the player can chain quick taps and the camera will follow
+    /// each new target as it's set.
+    var stepTarget: SIMD2<Float>?
 
     /// Current camera height ABOVE eye-height. 0 = walking on the
     /// floor; positive = hovering. The camera Y is always
@@ -63,19 +68,25 @@ private final class PlayerState {
     private let flyClearance: Float = wallHeight - eyeHeight + 0.1
 
     private let walls       : [WallAABB]
+    private let width       : Int
+    private let height      : Int
     private let exitCellX   : Int
     private let exitCellZ   : Int
     private let playerRadius: Float = 0.22
-    private let moveSpeed   : Float = 2.6
+    private let stepSpeed   : Float = 3.5   // cells per second during a step lerp
     private let altitudeRate: Float = 4.0   // 1/seconds: ~0.25 s to converge
 
     init(start: SIMD3<Float>, yaw: Float,
-         walls: [WallAABB], exitCellX: Int, exitCellZ: Int,
+         walls: [WallAABB],
+         width: Int, height: Int,
+         exitCellX: Int, exitCellZ: Int,
          maxAltitude: Float)
     {
         self.position    = start
         self.yaw         = yaw
         self.walls       = walls
+        self.width       = width
+        self.height      = height
         self.exitCellX   = exitCellX
         self.exitCellZ   = exitCellZ
         self.maxAltitude = maxAltitude
@@ -88,6 +99,55 @@ private final class PlayerState {
         pitch = max(-1.4, min(1.4, pitch))
     }
 
+    /// Step exactly one cell relative to the player's facing.
+    /// `forward` and `strafe` are -1, 0, or 1. Yaw is snapped to
+    /// the nearest cardinal direction so movement always lands on
+    /// a clean grid cell, regardless of how the camera is rotated.
+    /// Blocked moves (walls in the way) silently no-op.
+    func step(forward: Int, strafe: Int) {
+        guard !won else { return }
+        guard !isFlying else { return }
+
+        // Snap yaw to nearest cardinal multiple of π/2.
+        let snapped = round(yaw / (.pi / 2)) * (.pi / 2)
+        // Forward / right vectors in cardinal-grid space.
+        let fx = Float(-sin(snapped))
+        let fz = Float(-cos(snapped))
+        // Right of "facing snapped" is forward rotated -90° around Y.
+        // (cos(s)*fx + ... etc -- but cardinal snap makes this trivial.)
+        let rx = -fz
+        let rz =  fx
+        let dx = fx * Float(forward) + rx * Float(strafe)
+        let dz = fz * Float(forward) + rz * Float(strafe)
+
+        // Current cell in maze coords.
+        let cx = Int(floor(position.x / cellSize))
+        let cz = Int(floor(position.z / cellSize))
+        // Nearest integer for direction (rounds the trig values).
+        let stepX = Int(round(dx))
+        let stepZ = Int(round(dz))
+        let targetX = cx + stepX
+        let targetZ = cz + stepZ
+
+        // Block walking off the maze grid.
+        guard targetX >= 0, targetX < width,
+              targetZ >= 0, targetZ < height
+        else { return }
+
+        // Check the midpoint between current and target cell
+        // centers -- if a wall AABB intersects the player radius
+        // there, the wall slot between cells is closed.
+        let midX = (Float(cx) + 0.5 + Float(stepX) * 0.5) * cellSize
+        let midZ = (Float(cz) + 0.5 + Float(stepZ) * 0.5) * cellSize
+        if collides(at: SIMD3(midX, eyeHeight, midZ)) { return }
+
+        // Commit the step -- lerp will pull position toward the
+        // target cell's center each tick.
+        let targetWX = (Float(targetX) + 0.5) * cellSize
+        let targetWZ = (Float(targetZ) + 0.5) * cellSize
+        stepTarget = SIMD2(targetWX, targetWZ)
+    }
+
     /// Step the altitude target up / down. Caller usually calls
     /// these from button taps; the actual altitude lerps toward
     /// the target across multiple ticks.
@@ -98,7 +158,7 @@ private final class PlayerState {
         targetAltitude = max(0, targetAltitude - step)
     }
 
-    /// Apply one frame of movement + altitude at `dt` seconds.
+    /// Apply one frame of altitude lerp + step-target lerp.
     func tick(dt: Float) {
         guard !won else { return }
 
@@ -107,21 +167,26 @@ private final class PlayerState {
         let dy = targetAltitude - altitudeOffset
         altitudeOffset += dy * min(1, dt * altitudeRate)
 
-        let f = SIMD3<Float>(-sin(yaw), 0, -cos(yaw))
-        let r = SIMD3<Float>( cos(yaw), 0, -sin(yaw))
-        let dxz = (r * moveInput.x + f * moveInput.y) * moveSpeed * dt
-
         var p = position
-        if isFlying {
-            // Hover only -- the joystick is ignored above the hedge.
-            // You go up, look around, come back down, and walk.
-            // No horizontal drift.
-        } else {
-            // On (or near) the ground: axis-separated collision.
-            let nx = SIMD3(p.x + dxz.x, eyeHeight, p.z)
-            if !collides(at: nx) { p.x = nx.x }
-            let nz = SIMD3(p.x, eyeHeight, p.z + dxz.z)
-            if !collides(at: nz) { p.z = nz.z }
+
+        // Step-target lerp: pull (x, z) toward the most recent
+        // step destination, if any. Each lerp lands on a cell
+        // center; tapping again mid-lerp replaces the target so
+        // chained taps flow continuously.
+        if !isFlying, let target = stepTarget {
+            let dx = target.x - p.x
+            let dz = target.y - p.z
+            let dist = sqrt(dx * dx + dz * dz)
+            let stepDist = stepSpeed * cellSize * dt
+            if dist <= stepDist || dist < 0.001 {
+                p.x = target.x
+                p.z = target.y
+                stepTarget = nil
+            } else {
+                let scale = stepDist / dist
+                p.x += dx * scale
+                p.z += dz * scale
+            }
         }
         p.y = eyeHeight + altitudeOffset
 
@@ -135,6 +200,7 @@ private final class PlayerState {
                 let cz = (floor(p.z / cellSize) + 0.5) * cellSize
                 p.x = cx
                 p.z = cz
+                stepTarget = nil
             }
         }
         position = p
@@ -162,7 +228,41 @@ private final class PlayerState {
     }
 }
 
-// MARK: - Virtual joystick
+// MARK: - D-pad
+
+/// 4-way directional pad. Each button calls `onStep` with a
+/// (forward, strafe) tuple where each component is -1, 0, or 1.
+/// Up = forward 1; down = -1; right = strafe 1; left = -1.
+private struct DPad: View {
+    let onStep: (_ forward: Int, _ strafe: Int) -> Void
+
+    var body: some View {
+        VStack(spacing: 6) {
+            button("arrow.up") { onStep( 1,  0) }
+            HStack(spacing: 6) {
+                button("arrow.left")  { onStep( 0, -1) }
+                Color.clear.frame(width: 52, height: 52)
+                button("arrow.right") { onStep( 0,  1) }
+            }
+            button("arrow.down") { onStep(-1,  0) }
+        }
+    }
+
+    private func button(_ name: String,
+                        action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Image(systemName: name)
+                .font(.title2.weight(.semibold))
+                .frame(width: 52, height: 52)
+                .background(.ultraThinMaterial, in: Circle())
+                .overlay(Circle().stroke(.white.opacity(0.35),
+                                         lineWidth: 1))
+                .foregroundStyle(.white)
+        }
+    }
+}
+
+// MARK: - Virtual joystick (unused -- kept for reference)
 
 /// Floating thumbpad. Drag inside (or anywhere over) it; the
 /// knob clamps to the radius and writes a normalized -1...1
@@ -326,22 +426,27 @@ struct Maze3DView: View {
             ))
         }
 
-        // Corner pillars only at TRUE corners. Use a custom mesh
-        // with UVs scaled to wallT / cellSize (~0.22) on the side
-        // faces so the pillar shows just a *slice* of the hedge
-        // texture at the same density as the surrounding wall
-        // slabs. With the seamless tiling hedge texture, the slice
-        // reads as a continuation of the wall instead of a
-        // squashed full-texture stripe.
-        let pillarUVScale = wallThickness / cellSize
-        let cornerMesh = Self.makePillarMesh(
-            thickness: wallThickness,
-            height   : wallHeight,
-            uvScale  : pillarUVScale
+        // Corner pillars at TRUE corners. Use a SOLID hedge-green
+        // material instead of the textured one -- mapping the full
+        // 0..1 hedge image onto a 0.18-wide face was either
+        // squashing it (visible stretched stripe) or showing a
+        // thin slice at mismatched density vs. the surrounding
+        // wall slabs (visible content discontinuity). A flat green
+        // post at the corner blends well at distance and reads as
+        // "the corner is in shadow" up close -- way less jarring
+        // than either textured approach.
+        let pillarColor = SystemColor(
+            red: 0.18, green: 0.34, blue: 0.14, alpha: 1.0
         )
+        let pillarMat = SimpleMaterial(
+            color: pillarColor, roughness: 0.95, isMetallic: false
+        )
+        let cornerMesh = MeshResource.generateBox(size: SIMD3(
+            wallThickness, wallHeight, wallThickness
+        ))
         for (cx, cz) in corners {
-            let pillar = ModelEntity(mesh: cornerMesh, materials: [wallMat])
-            pillar.position = SIMD3(cx, 0, cz)
+            let pillar = ModelEntity(mesh: cornerMesh, materials: [pillarMat])
+            pillar.position = SIMD3(cx, wallHeight / 2, cz)
             wallRoot.addChild(pillar)
             aabbs.append(WallAABB(
                 minX: cx - wallThickness / 2, maxX: cx + wallThickness / 2,
@@ -411,6 +516,8 @@ struct Maze3DView: View {
             start      : SIMD3(startX, eyeHeight, startZ),
             yaw        : .pi,                  // face +Z (toward exit)
             walls      : aabbs,
+            width      : maze.width,
+            height     : maze.height,
             exitCellX  : maze.exit.x,
             exitCellZ  : maze.height - 1,
             maxAltitude: maxAlt
@@ -832,25 +939,21 @@ struct Maze3DView: View {
             )
     }
 
-    /// Bottom-left movement joystick + reserved space along the
-    /// right side for action buttons (Solve, Fly come in 5b/5c).
-    /// Each subview owns its hit area so taps land on it instead
-    /// of the look surface below.
+    /// Bottom-left D-pad: 4 cardinal step buttons. Each tap moves
+    /// the player exactly one cell in the indicated direction
+    /// (relative to the player's facing); blocked moves no-op.
+    /// Look gestures still work everywhere on the rest of the
+    /// screen via the look surface below.
     private var controlsOverlay: some View {
-        let radius: CGFloat = 64
-        return VStack {
+        VStack {
             Spacer()
             HStack(alignment: .bottom) {
-                VirtualJoystick(
-                    value: Binding(
-                        get: { player?.moveInput ?? .zero },
-                        set: { player?.moveInput = $0 }
-                    ),
-                    radius: radius,
-                    label : "Move"
-                )
-                .padding(.leading, 28)
-                .padding(.bottom , 32)
+                DPad { fwd, strafe in
+                    player?.step(forward: fwd, strafe: strafe)
+                    Haptics.shared.carveTick()
+                }
+                .padding(.leading, 24)
+                .padding(.bottom , 28)
 
                 Spacer()
             }
