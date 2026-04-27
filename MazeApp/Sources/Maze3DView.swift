@@ -326,6 +326,13 @@ struct Maze3DView: View {
     @State private var solutionEntity = Entity()
     @State private var showingSolution = false
 
+    /// Cinematic-entry flag. While true, the camera is animating
+    /// from a high overhead opening shot down to the player's
+    /// eye-height starting position; per-frame camera updates and
+    /// look / step input are paused so the move(to:) animation
+    /// owns the camera transform.
+    @State private var enteringScene: Bool = true
+
     /// Cumulative drag translation last seen during a look gesture
     /// -- used to derive a per-frame delta. SwiftUI's DragGesture
     /// reports cumulative translation, so the difference between
@@ -339,8 +346,9 @@ struct Maze3DView: View {
             height: translation.height - lookAnchor.height
         )
         lookAnchor = translation
-        // Look gesture works at every altitude -- on the ground
-        // and while hovering you can still pan to look around.
+        // Suppress while the cinematic entry is still descending --
+        // we'd be fighting the move(to:) animation.
+        guard !enteringScene else { return }
         player?.applyLookDelta(delta)
     }
 
@@ -517,9 +525,45 @@ struct Maze3DView: View {
             maxAltitude: maxAlt
         )
         player = p
-        cameraEntity.position    = p.position
-        cameraEntity.orientation = simd_quatf(angle: p.yaw,
-                                              axis : [0, 1, 0])
+
+        // ---- cinematic entry ----
+        // Place the camera HIGH above the maze, looking down at the
+        // entrance, then sweep it down to the player's eye-level
+        // starting transform over a few seconds. Look / step input
+        // is gated behind `enteringScene` until the move finishes.
+        let entryDuration: TimeInterval = 3.0
+
+        let openingPos = SIMD3<Float>(
+            mazeW / 2,
+            span * 1.05,
+            mazeH * 0.85 + span * 0.3
+        )
+        let opener = Entity()
+        opener.position = openingPos
+        opener.look(at: SIMD3(startX, 0, startZ),
+                    from: openingPos,
+                    relativeTo: nil)
+        cameraEntity.transform = opener.transform
+
+        let endRotation = simd_quatf(angle: p.yaw,   axis: [0, 1, 0])
+                        * simd_quatf(angle: p.pitch, axis: [1, 0, 0])
+        let endTransform = Transform(
+            scale      : .one,
+            rotation   : endRotation,
+            translation: p.position
+        )
+        cameraEntity.move(
+            to        : endTransform,
+            relativeTo: nil,
+            duration  : entryDuration,
+            timingFunction: .easeInOut
+        )
+        Task { @MainActor in
+            try? await Task.sleep(
+                nanoseconds: UInt64(entryDuration * 1_000_000_000)
+            )
+            self.enteringScene = false
+        }
         #else
         // Overhead-tilted on macOS until WASD/mouselook lands.
         let camY = span * 1.4
@@ -532,12 +576,13 @@ struct Maze3DView: View {
         content.add(cameraEntity)
 
         // Per-frame update: drive the camera from PlayerState.
-        // Continuous -- altitude lerps toward target inside tick()
-        // so we always want the camera to follow the lerp.
+        // Skipped while the cinematic entry move(to:) is running
+        // so we don't fight the animation for the camera transform.
         #if os(iOS)
         _ = content.subscribe(to: SceneEvents.Update.self) { event in
             Task { @MainActor in
                 guard let player = self.player else { return }
+                guard !self.enteringScene else { return }
                 player.tick(dt: Float(event.deltaTime))
                 self.cameraEntity.position = player.position
                 let qYaw   = simd_quatf(angle: player.yaw,   axis: [0, 1, 0])
@@ -943,6 +988,7 @@ struct Maze3DView: View {
             Spacer()
             HStack(alignment: .bottom) {
                 DPad { fwd, strafe in
+                    guard !enteringScene else { return }
                     player?.step(forward: fwd, strafe: strafe)
                     Haptics.shared.carveTick()
                 }
