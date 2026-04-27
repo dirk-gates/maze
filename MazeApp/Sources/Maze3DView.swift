@@ -174,7 +174,9 @@ struct Maze3DView: View {
     // Built once on view appear.
     @State private var player: PlayerState?
     @State private var walls : [WallAABB] = []
-    @State private var cameraEntity = PerspectiveCamera()
+    @State private var cameraEntity   = PerspectiveCamera()
+    @State private var solutionEntity = Entity()
+    @State private var showingSolution = false
 
     /// Cumulative drag translation last seen during a look gesture
     /// -- used to derive a per-frame delta. SwiftUI's DragGesture
@@ -210,11 +212,12 @@ struct Maze3DView: View {
             controlsOverlay
             #endif
 
-            // Top-left close button
-            VStack(alignment: .leading) {
+            // Top bar: close on the left, Solve toggle on the right.
+            VStack {
                 HStack {
                     closeButton
                     Spacer()
+                    solveToggle
                 }
                 Spacer()
             }
@@ -272,6 +275,13 @@ struct Maze3DView: View {
                x: Float(maze.exit.x) * cellSize + cellSize / 2,
                z: mazeH - cellSize / 2,
                color: .systemGreen)
+
+        // Solution path -- always built, hidden until the user
+        // toggles it on. Built up front so the toggle is instant.
+        solutionEntity.name = "solution"
+        solutionEntity.isEnabled = showingSolution
+        buildSolutionPath(into: solutionEntity)
+        content.add(solutionEntity)
 
         // sun
         let sun = DirectionalLight()
@@ -331,6 +341,55 @@ struct Maze3DView: View {
             }
         }
         #endif
+    }
+
+    /// Build the solution path as a chain of thin elongated boxes
+    /// hovering just above the floor. Uses an unlit material so
+    /// the line "glows" -- it ignores scene lighting and reads
+    /// brightly even in the shadowed corridors.
+    @MainActor
+    private func buildSolutionPath(into root: Entity) {
+        guard let path = maze.solution, path.count >= 2 else { return }
+        let mat = UnlitMaterial(color: .cyan)
+        let lineWidth: Float = 0.10
+        let lineY    : Float = 0.04
+
+        func center(_ c: Coord) -> SIMD3<Float> {
+            SIMD3(
+                Float(c.x) * cellSize + cellSize / 2,
+                lineY,
+                Float(c.y) * cellSize + cellSize / 2
+            )
+        }
+
+        for i in 0 ..< path.count - 1 {
+            let a = center(path[i])
+            let b = center(path[i + 1])
+            let mid    = (a + b) * 0.5
+            let dx     = b.x - a.x
+            let dz     = b.z - a.z
+            let length = sqrt(dx * dx + dz * dz)
+            if length < 0.001 { continue }
+            let yaw    = atan2(dx, dz)
+
+            // A box's default depth axis is +Z, so a yaw rotation
+            // around Y aligns that depth axis with (dx, 0, dz).
+            let mesh = MeshResource.generateBox(
+                size: SIMD3(lineWidth, lineWidth, length)
+            )
+            let seg = ModelEntity(mesh: mesh, materials: [mat])
+            seg.position    = mid
+            seg.orientation = simd_quatf(angle: yaw, axis: [0, 1, 0])
+            root.addChild(seg)
+
+            // Joint pad at the elbow so corners look continuous.
+            let elbow = ModelEntity(
+                mesh: .generateBox(size: SIMD3(lineWidth, lineWidth, lineWidth)),
+                materials: [mat]
+            )
+            elbow.position = b
+            root.addChild(elbow)
+        }
     }
 
     @MainActor
@@ -402,6 +461,27 @@ struct Maze3DView: View {
                 .padding()
         }
         .accessibilityLabel("Close 3D view")
+    }
+
+    /// Top-right toggle that shows / hides the solution-path
+    /// overlay. Tint cyan when active to mirror the line color.
+    private var solveToggle: some View {
+        Button {
+            showingSolution.toggle()
+            solutionEntity.isEnabled = showingSolution
+        } label: {
+            Image(systemName: "scope")
+                .font(.largeTitle)
+                .padding(10)
+                .background(
+                    Circle().fill(.black.opacity(0.55))
+                )
+                .foregroundStyle(showingSolution ? .cyan : .white)
+                .padding()
+        }
+        .accessibilityLabel(showingSolution
+                            ? "Hide solution path"
+                            : "Show solution path")
     }
 
     #if os(iOS)
