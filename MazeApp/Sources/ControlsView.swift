@@ -3,6 +3,7 @@
 // two rows on narrow iPhone widths so the slider doesn't crowd
 // out the buttons.
 
+import MazeKit
 import SwiftUI
 
 struct ControlsView: View {
@@ -36,6 +37,7 @@ struct ControlsView: View {
             speedControl.frame(minWidth: 200, maxWidth: .infinity)
             stats
             zoomControls
+            shareButton
             libraryButton
             settingsButton
         }
@@ -47,6 +49,7 @@ struct ControlsView: View {
                 buttons
                 Spacer()
                 stats
+                shareButton
                 libraryButton
                 settingsButton
             }
@@ -164,6 +167,34 @@ struct ControlsView: View {
         .buttonStyle(.bordered)
         .buttonBorderShape(.circle)
         .accessibilityLabel("More rows and columns")
+    }
+
+    /// Build a maze:// share URL for whatever is currently on
+    /// screen. Returns nil before the first generation lands -- the
+    /// share button hides itself in that case.
+    private var currentShareURL: URL? {
+        guard viewModel.maze != nil else { return nil }
+        let snapshot = SavedMaze(
+            seed          : viewModel.currentSeed,
+            width         : viewModel.width,
+            height        : viewModel.height,
+            lookAheadDepth: viewModel.lookAheadDepth
+        )
+        return snapshot.shareURL()
+    }
+
+    @ViewBuilder
+    private var shareButton: some View {
+        if let url = currentShareURL {
+            ShareLink(item: url,
+                      preview: SharePreview("Maze \(viewModel.width)×\(viewModel.height)")) {
+                Image(systemName: "square.and.arrow.up")
+                    .font(.title3)
+                    .frame(width: tapTarget, height: tapTarget)
+                    .contentShape(Rectangle())
+            }
+            .accessibilityLabel("Share this maze")
+        }
     }
 
     private var libraryButton: some View {
