@@ -42,8 +42,8 @@ private struct WallAABB {
 private final class PlayerState {
     var position : SIMD3<Float>
     var yaw      : Float            // radians, around +Y; 0 = facing -Z
+    var pitch    : Float = 0        // radians, around X; clamped ±1.4
     var moveInput: SIMD2<Float> = .zero  // x = strafe, y = forward
-    var lookInput: SIMD2<Float> = .zero  // x = yaw rate, y = pitch (unused yet)
     var won      : Bool         = false
 
     private let walls       : [WallAABB]
@@ -51,7 +51,6 @@ private final class PlayerState {
     private let exitCellZ   : Int
     private let playerRadius: Float = 0.22
     private let moveSpeed   : Float = 2.6     // world units / sec
-    private let lookSpeed   : Float = 2.2     // radians / sec
 
     init(start: SIMD3<Float>, yaw: Float,
          walls: [WallAABB], exitCellX: Int, exitCellZ: Int)
@@ -63,12 +62,24 @@ private final class PlayerState {
         self.exitCellZ = exitCellZ
     }
 
-    /// Apply one frame of input at `dt` seconds.
+    /// Apply a look-area drag delta (in points) to yaw / pitch.
+    /// Called from the right-side touch overlay each frame the
+    /// gesture changes -- PUBG-style: thumb can drop anywhere on
+    /// the right side and drag to rotate. Sensitivity is in
+    /// radians-per-point so it's resolution-independent.
+    func applyLookDelta(_ delta: CGSize) {
+        let sens: Float = 0.005
+        yaw   -= Float(delta.width)  * sens
+        pitch -= Float(delta.height) * sens
+        // Clamp pitch so the camera never flips upside-down or
+        // looks straight up/down (which feels disorienting in a
+        // first-person maze view).
+        pitch = max(-1.4, min(1.4, pitch))
+    }
+
+    /// Apply one frame of movement input at `dt` seconds.
     func tick(dt: Float) {
         guard !won else { return }
-        // Yaw first so movement feels responsive to look changes.
-        yaw -= lookInput.x * lookSpeed * dt
-
         let f = SIMD3<Float>(-sin(yaw), 0, -cos(yaw))
         let r = SIMD3<Float>( cos(yaw), 0, -sin(yaw))
         let dxz = (r * moveInput.x + f * moveInput.y) * moveSpeed * dt
@@ -165,24 +176,38 @@ struct Maze3DView: View {
     @State private var walls : [WallAABB] = []
     @State private var cameraEntity = PerspectiveCamera()
 
+    /// Cumulative drag translation last seen during a look gesture
+    /// -- used to derive a per-frame delta. SwiftUI's DragGesture
+    /// reports cumulative translation, so the difference between
+    /// successive callbacks is the actual finger motion since
+    /// last frame.
+    @State private var lookAnchor: CGSize = .zero
+
+    private func applyLook(translation: CGSize) {
+        let delta = CGSize(
+            width : translation.width  - lookAnchor.width,
+            height: translation.height - lookAnchor.height
+        )
+        lookAnchor = translation
+        player?.applyLookDelta(delta)
+    }
+
     var body: some View {
         ZStack {
             RealityView { content in
                 buildScene(content)
             } update: { content in
-                // RealityView's update closure fires when SwiftUI
-                // diffs the view -- we use the SceneEvents.Update
-                // subscription set up in build for the per-frame
-                // tick instead.
                 _ = content
             }
             .ignoresSafeArea()
             .background(scheme == .dark ? Color.black : Color(white: 0.85))
 
-            // Joystick overlays (iOS only -- macOS keeps the
-            // overhead camera for now)
             #if os(iOS)
-            joystickOverlay
+            // PUBG-style: full-screen drag-to-look. Sits BELOW the
+            // joystick + buttons in the ZStack so thumb taps on
+            // those still reach them (SwiftUI hit-tests top-down).
+            lookSurface
+            controlsOverlay
             #endif
 
             // Top-left close button
@@ -297,9 +322,12 @@ struct Maze3DView: View {
                 guard let player = self.player else { return }
                 player.tick(dt: Float(event.deltaTime))
                 self.cameraEntity.position = player.position
-                self.cameraEntity.orientation = simd_quatf(
-                    angle: player.yaw, axis: [0, 1, 0]
-                )
+                // Yaw around Y, then pitch around the resulting
+                // local X. Order matters: pitch * yaw lets you
+                // look up/down WITHOUT introducing roll.
+                let qYaw   = simd_quatf(angle: player.yaw,   axis: [0, 1, 0])
+                let qPitch = simd_quatf(angle: player.pitch, axis: [1, 0, 0])
+                self.cameraEntity.orientation = qYaw * qPitch
             }
         }
         #endif
@@ -377,13 +405,39 @@ struct Maze3DView: View {
     }
 
     #if os(iOS)
-    private var joystickOverlay: some View {
-        // ZStack-positioned thumbpads at the bottom corners.
-        // Sized for thumb reach without dominating the screen.
+    /// Full-screen transparent layer that captures drag gestures
+    /// for camera rotation. PUBG / Call of Duty pattern -- thumb
+    /// can land anywhere and dragging rotates the view. Sits
+    /// underneath the joystick + buttons in the ZStack so taps on
+    /// those reach them first.
+    private var lookSurface: some View {
+        Color.clear
+            .contentShape(Rectangle())
+            .gesture(
+                DragGesture(minimumDistance: 0)
+                    .onChanged { value in
+                        // Use the per-frame translation delta, not
+                        // the cumulative one -- otherwise far drags
+                        // accelerate the rotation. SwiftUI gives us
+                        // cumulative `translation`, so we keep a
+                        // running anchor.
+                        applyLook(translation: value.translation)
+                    }
+                    .onEnded { _ in
+                        lookAnchor = .zero
+                    }
+            )
+    }
+
+    /// Bottom-left movement joystick + reserved space along the
+    /// right side for action buttons (Solve, Fly come in 5b/5c).
+    /// Each subview owns its hit area so taps land on it instead
+    /// of the look surface below.
+    private var controlsOverlay: some View {
         let radius: CGFloat = 64
         return VStack {
             Spacer()
-            HStack {
+            HStack(alignment: .bottom) {
                 VirtualJoystick(
                     value: Binding(
                         get: { player?.moveInput ?? .zero },
@@ -396,17 +450,6 @@ struct Maze3DView: View {
                 .padding(.bottom , 32)
 
                 Spacer()
-
-                VirtualJoystick(
-                    value: Binding(
-                        get: { player?.lookInput ?? .zero },
-                        set: { player?.lookInput = $0 }
-                    ),
-                    radius: radius,
-                    label : "Look"
-                )
-                .padding(.trailing, 28)
-                .padding(.bottom  , 32)
             }
         }
     }
