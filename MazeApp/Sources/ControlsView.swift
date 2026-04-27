@@ -33,28 +33,22 @@ struct ControlsView: View {
         // buttons on the left and stats/settings on the right) so it
         // stretches across iPhone landscape and iPad widths instead
         // of pinning to a stubby 200pt.
-        HStack(spacing: 16) {
+        HStack(spacing: 12) {
             buttons
             speedControl.frame(minWidth: 200, maxWidth: .infinity)
             stats
             zoomControls
-            walkButton
-            shareButton
-            libraryButton
-            settingsButton
+            iconColumn
         }
     }
 
     private var twoRows: some View {
         VStack(spacing: 10) {
-            HStack {
+            HStack(spacing: 8) {
                 buttons
                 Spacer()
                 stats
-                walkButton
-                shareButton
-                libraryButton
-                settingsButton
+                iconColumn
             }
             // Density on the same row as the slider so each control
             // has a proper hit target. Putting density on the action
@@ -68,15 +62,31 @@ struct ControlsView: View {
         }
     }
 
+    /// Walk / Share / History / Settings packed tight. The buttons
+    /// still own their 44pt hit targets internally; the small
+    /// outer spacing just keeps the whole strip from eating the
+    /// row on iPhone widths.
+    @ViewBuilder
+    private var iconColumn: some View {
+        HStack(spacing: 0) {
+            walkButton
+            shareButton
+            libraryButton
+            settingsButton
+        }
+    }
+
     // ----- pieces -----
 
     @ViewBuilder
     private var buttons: some View {
+        // No explicit minWidth -- the Label sizes to its content
+        // (~85 / ~65 pt) so the action row keeps headroom for the
+        // icon column on the right.
         Button {
             viewModel.generate()
         } label: {
             Label("Generate", systemImage: "arrow.clockwise")
-                .frame(minWidth: 110)
         }
         .buttonStyle(.borderedProminent)
         .disabled(viewModel.isGenerating)
@@ -85,7 +95,6 @@ struct ControlsView: View {
             viewModel.solve()
         } label: {
             Label("Solve", systemImage: "scope")
-                .frame(minWidth: 90)
         }
         .buttonStyle(.bordered)
         .disabled(viewModel.maze == nil || viewModel.isGenerating || viewModel.isSolving)
