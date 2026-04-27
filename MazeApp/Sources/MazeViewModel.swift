@@ -126,6 +126,20 @@ final class MazeViewModel {
         generate()
     }
 
+    /// Open a `maze://load?...` URL. Returns true if the URL parsed
+    /// and a generation was kicked off; false if the URL was
+    /// unrecognized so callers can fall through to other handling.
+    @discardableResult
+    func openShareURL(_ url: URL) -> Bool {
+        guard let p = SavedMaze.parse(url: url) else { return false }
+        width          = p.width
+        height         = p.height
+        lookAheadDepth = p.lookAheadDepth
+        pinnedSeed     = p.seed
+        generate()
+        return true
+    }
+
     /// Zoom in (smaller targetUnitPx → cells get smaller, more of them
     /// fit) or out (larger targetUnitPx → bigger cells, fewer of them).
     /// The maze is always refit-and-regenerated so it keeps filling

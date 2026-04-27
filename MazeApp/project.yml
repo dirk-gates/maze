@@ -48,6 +48,10 @@ targets:
         LSApplicationCategoryType: public.app-category.games
         LSMinimumSystemVersion: "$(MACOSX_DEPLOYMENT_TARGET)"
         NSHumanReadableCopyright: "Copyright (c) 2026 Dirk Gates"
+        CFBundleURLTypes:
+          - CFBundleURLName: com.dirkgates.Maze.share
+            CFBundleURLSchemes:
+              - maze
 
   # ------------------------------------------------------------ iOS
   MazeIOS:
@@ -90,3 +94,7 @@ targets:
           - UIInterfaceOrientationLandscapeLeft
           - UIInterfaceOrientationLandscapeRight
         NSHumanReadableCopyright: "Copyright (c) 2026 Dirk Gates"
+        CFBundleURLTypes:
+          - CFBundleURLName: com.dirkgates.Maze.iOS.share
+            CFBundleURLSchemes:
+              - maze

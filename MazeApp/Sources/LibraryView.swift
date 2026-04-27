@@ -60,9 +60,29 @@ struct LibraryView: View {
                             row(for: saved)
                         }
                         .buttonStyle(.plain)
-                    }
-                    .onDelete { offsets in
-                        viewModel.library.remove(at: offsets)
+                        .swipeActions(edge: .trailing, allowsFullSwipe: false) {
+                            Button(role: .destructive) {
+                                viewModel.library.remove(saved)
+                            } label: {
+                                Label("Delete", systemImage: "trash")
+                            }
+                            ShareLink(item: saved.shareURL(),
+                                      preview: SharePreview("Maze \(saved.width)×\(saved.height)")) {
+                                Label("Share", systemImage: "square.and.arrow.up")
+                            }
+                            .tint(.blue)
+                        }
+                        .contextMenu {
+                            ShareLink(item: saved.shareURL(),
+                                      preview: SharePreview("Maze \(saved.width)×\(saved.height)")) {
+                                Label("Share", systemImage: "square.and.arrow.up")
+                            }
+                            Button(role: .destructive) {
+                                viewModel.library.remove(saved)
+                            } label: {
+                                Label("Delete", systemImage: "trash")
+                            }
+                        }
                     }
                 }
             }

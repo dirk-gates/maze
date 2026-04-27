@@ -17,6 +17,9 @@ struct MazeApp: App {
         WindowGroup {
             ContentView(viewModel: viewModel)
                 .preferredColorScheme(viewModel.schemeOverride)
+                .onOpenURL { url in
+                    viewModel.openShareURL(url)
+                }
             #if os(macOS)
                 .frame(minWidth: 600, minHeight: 480)
             #endif
