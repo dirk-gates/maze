@@ -8,7 +8,6 @@
 
 /* Begin PBXBuildFile section */
 		0C431E8BD52784D4D301FF84 /* MazeThumbnail.swift in Sources */ = {isa = PBXBuildFile; fileRef = DA319A6F9C4E839DAB447869 /* MazeThumbnail.swift */; };
-		0C8C23CB956A7348211F05D6 /* MazeIOSInfo.plist in Resources */ = {isa = PBXBuildFile; fileRef = A1A25A18D1719A534A4B32BF /* MazeIOSInfo.plist */; };
 		283CB5C325A1378A7CEBF357 /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5FAE2DBE3D925890761E18EB /* ContentView.swift */; };
 		2C7C6D0C1A0FC3AB532F248C /* MazeApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 176C90ADADDE3F85A9703573 /* MazeApp.swift */; };
 		333910A0C2D5387BA96C3BAA /* MazeViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = B34A95A3838C50BEF62F38BB /* MazeViewModel.swift */; };
@@ -46,7 +45,6 @@
 		6C59E9A4B8A3B61392A1041A /* MazeIOS.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = MazeIOS.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		825562C7B3462A1BA11F4A78 /* Haptics.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Haptics.swift; sourceTree = "<group>"; };
 		8DFC2C09CEDADDA5C197B104 /* MazeCanvasView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MazeCanvasView.swift; sourceTree = "<group>"; };
-		A1A25A18D1719A534A4B32BF /* MazeIOSInfo.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = MazeIOSInfo.plist; sourceTree = "<group>"; };
 		B34A95A3838C50BEF62F38BB /* MazeViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MazeViewModel.swift; sourceTree = "<group>"; };
 		BA25421C2445ADAABEF14271 /* Maze.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Maze.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		CB377560EE925ED1788C3802 /* ControlsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ControlsView.swift; sourceTree = "<group>"; };
@@ -85,7 +83,6 @@
 				EF528CA53282296DA9B9AD9B /* LibraryView.swift */,
 				176C90ADADDE3F85A9703573 /* MazeApp.swift */,
 				8DFC2C09CEDADDA5C197B104 /* MazeCanvasView.swift */,
-				A1A25A18D1719A534A4B32BF /* MazeIOSInfo.plist */,
 				DFB505CD683298BBC716DA0B /* MazeLibrary.swift */,
 				DA319A6F9C4E839DAB447869 /* MazeThumbnail.swift */,
 				B34A95A3838C50BEF62F38BB /* MazeViewModel.swift */,
@@ -220,7 +217,6 @@
 			buildActionMask = 2147483647;
 			files = (
 				DEFB6EAE502F86E97D96EE28 /* Assets.xcassets in Resources */,
-				0C8C23CB956A7348211F05D6 /* MazeIOSInfo.plist in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -271,6 +267,7 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_ENTITLEMENTS = Sources/MazeIOS.entitlements;
 				CODE_SIGN_IDENTITY = "iPhone Developer";
 				ENABLE_PREVIEWS = YES;
 				INFOPLIST_FILE = Sources/MazeIOSInfo.plist;
@@ -461,6 +458,7 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_ENTITLEMENTS = Sources/MazeIOS.entitlements;
 				CODE_SIGN_IDENTITY = "iPhone Developer";
 				ENABLE_PREVIEWS = YES;
 				INFOPLIST_FILE = Sources/MazeIOSInfo.plist;
