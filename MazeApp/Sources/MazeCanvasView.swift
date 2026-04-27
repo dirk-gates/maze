@@ -39,10 +39,13 @@ struct MazeCanvasView: View {
         let ox    = (size.width  - mazeW) / 2
         let oy    = (size.height - mazeH) / 2
 
-        // -------- material (uncarved) --------
+        // -------- floor (path color fills the whole maze rect) -----
+        // Walls are drawn AFTER the carved-path computation as the
+        // SUBTRACTED inverse of the carved area, so we can apply a
+        // shadow filter that casts onto the path floor below.
         context.fill(
             Path(CGRect(x: ox, y: oy, width: mazeW, height: mazeH)),
-            with: .color(theme.material))
+            with: .color(theme.carved))
 
         // -------- helpers --------
         func cellRect(_ c: Coord) -> CGRect {
@@ -68,9 +71,9 @@ struct MazeCanvasView: View {
         }
 
         // Build a single Path containing every carved region (cells,
-        // open walls, gates) and fill it once. Filling each rect
-        // separately produces faint anti-aliasing seams at adjacent
-        // boundaries; a single path treats them as one shape.
+        // open walls, gates). Filling each rect separately produces
+        // faint anti-aliasing seams at adjacent boundaries; a single
+        // path treats them as one shape.
         var carvedPath = Path()
         for c in viewModel.carvedCells {
             carvedPath.addRect(cellRect(c))
@@ -87,7 +90,25 @@ struct MazeCanvasView: View {
             let y = oy + mazeH - ws
             carvedPath.addRect(CGRect(x: x, y: y, width: cs, height: ws))
         }
-        context.fill(carvedPath, with: .color(theme.carved))
+
+        // -------- walls = (maze rect) − (carved path) --------
+        // Drawn inside a layer with a soft drop shadow so the
+        // shadow lands on the path floor we filled above. Reads
+        // as "walls have height" without needing real 3D.
+        let mazeRectPath = Path(CGRect(x: ox, y: oy, width: mazeW, height: mazeH))
+        let wallsPath    = mazeRectPath.subtracting(carvedPath)
+
+        let shadowOffset = max(1.5, ws * 0.6)
+        let shadowRadius = max(2.0, ws * 1.0)
+        context.drawLayer { layer in
+            layer.addFilter(.shadow(
+                color : .black.opacity(0.45),
+                radius: shadowRadius,
+                x     : shadowOffset,
+                y     : shadowOffset
+            ))
+            layer.fill(wallsPath, with: .color(theme.material))
+        }
 
         // -------- solution path (themed stroke through cell centers) --------
         let cellsDrawn = min(viewModel.solveProgress, viewModel.solutionPath.count)
