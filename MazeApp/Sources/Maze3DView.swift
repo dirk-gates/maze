@@ -386,7 +386,10 @@ struct Maze3DView: View {
         addClouds(into: content, mazeW: mazeW, mazeH: mazeH, span: span)
 
         // camera + player
-        cameraEntity.camera.fieldOfViewInDegrees = 70
+        // Wider FOV opens the maze up -- 70° felt claustrophobic in
+        // narrow corridors; 85° gives a more natural sense of space
+        // without the fish-eye distortion you'd get at 100+°.
+        cameraEntity.camera.fieldOfViewInDegrees = 85
 
         #if os(iOS)
         // First-person: stand at the entrance cell, face into the maze.
@@ -550,19 +553,27 @@ struct Maze3DView: View {
         let mazeW = Float(maze.width)  * cellSize
         let mazeH = Float(maze.height) * cellSize
 
+        // Each slab is shortened by `wallThickness` along its length
+        // axis (wallT/2 on each end) so it meets the corner pillars
+        // edge-to-edge rather than passing through them. Without
+        // this, slab + pillar surfaces co-occupy the same depth at
+        // every intersection -- z-fighting causes a visible flicker
+        // when you pan or move.
+        let slabLen = cellSize - wallThickness
+
         for x in 0..<maze.width where x != maze.entrance.x {
             slots.append((Float(x) * cellSize + cellSize / 2,
-                          0, cellSize, wallThickness))
+                          0, slabLen, wallThickness))
         }
         for x in 0..<maze.width where x != maze.exit.x {
             slots.append((Float(x) * cellSize + cellSize / 2,
-                          mazeH, cellSize, wallThickness))
+                          mazeH, slabLen, wallThickness))
         }
         for y in 0..<maze.height {
             slots.append((0,     Float(y) * cellSize + cellSize / 2,
-                          wallThickness, cellSize))
+                          wallThickness, slabLen))
             slots.append((mazeW, Float(y) * cellSize + cellSize / 2,
-                          wallThickness, cellSize))
+                          wallThickness, slabLen))
         }
         for y in 0..<maze.height {
             for x in 0..<maze.width {
@@ -572,7 +583,7 @@ struct Maze3DView: View {
                     if maze.wall(between: here, east) {
                         slots.append((Float(x + 1) * cellSize,
                                       Float(y) * cellSize + cellSize / 2,
-                                      wallThickness, cellSize))
+                                      wallThickness, slabLen))
                     }
                 }
                 if y + 1 < maze.height {
@@ -580,7 +591,7 @@ struct Maze3DView: View {
                     if maze.wall(between: here, south) {
                         slots.append((Float(x) * cellSize + cellSize / 2,
                                       Float(y + 1) * cellSize,
-                                      cellSize, wallThickness))
+                                      slabLen, wallThickness))
                     }
                 }
             }
