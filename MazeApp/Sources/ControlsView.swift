@@ -17,7 +17,11 @@ struct ControlsView: View {
         }
         .padding(.horizontal, 16)
         .padding(.vertical, 12)
-        .background(.regularMaterial)
+        // Thick material gives the bar enough opacity that the
+        // standard button styles read with proper contrast against
+        // it -- regular material was making bordered buttons feel
+        // washed out without needing any per-button decoration.
+        .background(.thickMaterial)
     }
 
     // ----- layouts -----
@@ -69,8 +73,6 @@ struct ControlsView: View {
                 .frame(minWidth: 110)
         }
         .buttonStyle(.borderedProminent)
-        .controlSize(.large)
-        .actionShadow()
         .disabled(viewModel.isGenerating)
 
         Button {
@@ -79,10 +81,7 @@ struct ControlsView: View {
             Label("Solve", systemImage: "scope")
                 .frame(minWidth: 90)
         }
-        .buttonStyle(.borderedProminent)
-        .controlSize(.large)
-        .tint(.green)
-        .actionShadow()
+        .buttonStyle(.bordered)
         .disabled(viewModel.maze == nil || viewModel.isGenerating || viewModel.isSolving)
     }
 
@@ -146,14 +145,10 @@ struct ControlsView: View {
     private var fewerCellsButton: some View {
         Button { viewModel.zoom(by: zoomStep) } label: {
             Image(systemName: "minus")
-                .font(.body.weight(.semibold))
                 .frame(width: tapTarget, height: tapTarget)
         }
-        .buttonStyle(.borderedProminent)
+        .buttonStyle(.bordered)
         .buttonBorderShape(.circle)
-        .controlSize(.large)
-        .tint(.gray)
-        .actionShadow()
         .accessibilityLabel("Fewer rows and columns")
         .disabled(viewModel.isGenerating)
     }
@@ -162,14 +157,10 @@ struct ControlsView: View {
     private var moreCellsButton: some View {
         Button { viewModel.zoom(by: 1.0 / zoomStep) } label: {
             Image(systemName: "plus")
-                .font(.body.weight(.semibold))
                 .frame(width: tapTarget, height: tapTarget)
         }
-        .buttonStyle(.borderedProminent)
+        .buttonStyle(.bordered)
         .buttonBorderShape(.circle)
-        .controlSize(.large)
-        .tint(.gray)
-        .actionShadow()
         .accessibilityLabel("More rows and columns")
         .disabled(viewModel.isGenerating)
     }
@@ -201,14 +192,3 @@ struct ControlsView: View {
     }
 }
 
-private extension View {
-    /// Soft drop shadow used on the four big action buttons so they
-    /// lift off the translucent material bar. Tuned to be obvious in
-    /// light mode and survive in dark mode without going muddy.
-    func actionShadow() -> some View {
-        self.shadow(color: .black.opacity(0.20),
-                    radius: 4,
-                    x     : 0,
-                    y     : 2)
-    }
-}
