@@ -295,12 +295,16 @@ struct Maze3DView: View {
         let mazeH = Float(maze.height) * cellSize
         let span  = max(mazeW, mazeH)
 
-        // floor -- procedural sandy / gravel PBR texture
+        // floor -- sits 1 cm below y=0 so it doesn't share depth
+        // with the wall side faces at their base. Co-occupied
+        // depth at the bottom edge of every wall was causing a
+        // visible flicker stripe along each wall-floor seam --
+        // dropping the floor 1cm separates them cleanly.
         let floor = ModelEntity(
             mesh: .generatePlane(width: mazeW, depth: mazeH),
             materials: [floorMaterial()]
         )
-        floor.position = SIMD3(mazeW / 2, 0, mazeH / 2)
+        floor.position = SIMD3(mazeW / 2, -0.01, mazeH / 2)
         content.add(floor)
 
         // walls -- procedural leaf-noise hedge texture
@@ -386,10 +390,10 @@ struct Maze3DView: View {
         addClouds(into: content, mazeW: mazeW, mazeH: mazeH, span: span)
 
         // camera + player
-        // Wider FOV opens the maze up -- 70° felt claustrophobic in
-        // narrow corridors; 85° gives a more natural sense of space
-        // without the fish-eye distortion you'd get at 100+°.
-        cameraEntity.camera.fieldOfViewInDegrees = 85
+        // 90° is the classic "comfortable wide" FPS FOV -- spacious
+        // in narrow corridors but well short of the fish-eye
+        // distortion that creeps in past ~100°.
+        cameraEntity.camera.fieldOfViewInDegrees = 90
 
         #if os(iOS)
         // First-person: stand at the entrance cell, face into the maze.
