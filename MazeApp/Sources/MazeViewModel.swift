@@ -172,31 +172,17 @@ final class MazeViewModel {
             seed          : seed
         )
         let stream     = Generator(params).generate()
-        let isInstant  = animationSpeed >= instantThreshold
         let totalCells = max(1, width * height)
 
-        // -------- pacing snapshot --------
-        // Slider is mapped to a TARGET total animation time (seconds)
-        // via a power curve: pegged-down ≈ 60s, ramps quickly toward
-        // the top so a single tap below pegged is a few seconds.
-        // Per-cell delay is then derived from target / cells, with
-        // batched flushes capped at 60fps so the per-event SwiftUI
-        // overhead can never dominate the total time -- which is
-        // what made "one click below pegged" feel like minutes on
-        // large mazes.
-        let targetSecs    = isInstant ? 0 : targetTotalSecs(slider: animationSpeed)
-        let targetMs      = targetSecs * 1000.0
-        // Cap frames at totalCells (no point flushing more often
-        // than there are events) and at 60fps × targetSecs.
-        let maxFps        = 60.0
-        let frames        = max(1, min(totalCells, Int(ceil(targetSecs * maxFps))))
-        let frameDelayMs  = targetMs / Double(frames)
-        let cellsPerFrame = max(1, Int(ceil(Double(totalCells) / Double(frames))))
+        // Pacing is re-derived from `animationSpeed` on every flush
+        // so live slider tweaks (drag, +/- buttons, turtle/hare
+        // taps) take effect immediately instead of being locked in
+        // at run-start. Pegging the slider mid-run drops into the
+        // instant fast path until .finished arrives.
 
         var pendingCells : [Coord]         = []
         var pendingOpens : [MazeKit.Edge]  = []
         var pendingCloses: [MazeKit.Edge]  = []
-        pendingCells.reserveCapacity(cellsPerFrame * 2)
 
         @MainActor func flushPending() {
             if !pendingCells.isEmpty {
@@ -213,11 +199,17 @@ final class MazeViewModel {
         for await event in stream {
             if Task.isCancelled { break }
 
-            if isInstant {
+            // Live slider read -- pegged means "skip remaining
+            // animation, just wait for the finished maze".
+            let speed = animationSpeed
+            if speed >= instantThreshold {
                 switch event {
                 case .attempt(let n):
                     attemptCount = n
                 case .finished(let m):
+                    pendingCells.removeAll(keepingCapacity: true)
+                    pendingOpens.removeAll(keepingCapacity: true)
+                    pendingCloses.removeAll(keepingCapacity: true)
                     populateRenderState(from: m)
                     maze      = m
                     statsLine = "\(carvedCells.count) cells, "
@@ -240,6 +232,8 @@ final class MazeViewModel {
                 statsLine = "attempt \(n)…"
             case .carved(let c):
                 pendingCells.append(c)
+                let (cellsPerFrame, frameDelayMs) =
+                    pacing(speed: speed, totalCells: totalCells)
                 if pendingCells.count >= cellsPerFrame {
                     flushPending()
                     Haptics.shared.carveTick()
@@ -264,6 +258,25 @@ final class MazeViewModel {
                 appendToLibrary(m, seed: seed)
             }
         }
+    }
+
+    /// Convert (slider position, total cell count) into a (cells-
+    /// per-flush, frame-delay-ms) pair. Caps at 60fps -- if the
+    /// slider would imply > 60 frames per second, we instead show
+    /// more cells per frame at a fixed 60fps cadence. If it would
+    /// imply < 60fps, frames slow down to match.
+    private func pacing(speed: Double, totalCells: Int)
+        -> (cellsPerFrame: Int, frameDelayMs: Double)
+    {
+        let targetSecs = targetTotalSecs(slider: speed)
+        // Just-below-instant: still show frames, no per-frame sleep.
+        if targetSecs < 0.05 {
+            return (max(1, totalCells / 60), 0)
+        }
+        let cellsPerSec   = Double(totalCells) / targetSecs
+        let cellsPerFrame = max(1, Int(ceil(cellsPerSec / 60.0)))
+        let frameDelayMs  = Double(cellsPerFrame) * 1000.0 / cellsPerSec
+        return (cellsPerFrame, frameDelayMs)
     }
 
     /// Map the slider position to a target TOTAL animation time
