@@ -252,7 +252,18 @@ struct Maze3DView: View {
                 _ = content
             }
             .ignoresSafeArea()
-            .background(scheme == .dark ? Color.black : Color(white: 0.85))
+            // Sky: a vertical gradient behind the RealityKit scene.
+            // RealityKit's scene has no skybox of its own, so the
+            // SwiftUI background reads as the sky around / above the
+            // maze whenever the player looks past the geometry.
+            // Horizon is warmer so it feels like outdoor daylight.
+            .background(
+                LinearGradient(
+                    colors    : skyGradientColors,
+                    startPoint: .bottom,
+                    endPoint  : .top
+                )
+            )
 
             #if os(iOS)
             // PUBG-style: full-screen drag-to-look. Sits BELOW the
@@ -291,18 +302,16 @@ struct Maze3DView: View {
         let mazeH = Float(maze.height) * cellSize
         let span  = max(mazeW, mazeH)
 
-        // floor
+        // floor -- procedural sandy / gravel PBR texture
         let floor = ModelEntity(
             mesh: .generatePlane(width: mazeW, depth: mazeH),
-            materials: [SimpleMaterial(color: .init(white: 0.55, alpha: 1.0),
-                                       roughness: 0.95, isMetallic: false)]
+            materials: [floorMaterial()]
         )
         floor.position = SIMD3(mazeW / 2, 0, mazeH / 2)
         content.add(floor)
 
-        // walls
-        let wallMat = SimpleMaterial(color: hedgeColor,
-                                     roughness: 0.85, isMetallic: false)
+        // walls -- procedural leaf-noise hedge texture
+        let wallMat = hedgeMaterial()
         let wallRoot = Entity()
         wallRoot.name = "walls"
         content.add(wallRoot)
@@ -337,18 +346,28 @@ struct Maze3DView: View {
         buildSolutionPath(into: solutionEntity)
         content.add(solutionEntity)
 
-        // sun
+        // sun -- warmer, brighter, casts soft shadows down the
+        // corridors. Outdoor daylight feel.
         let sun = DirectionalLight()
-        sun.light.intensity = 3500
-        sun.light.color     = .white
-        sun.shadow          = DirectionalLightComponent.Shadow(
+        sun.light.intensity = 6500
+        // Slight golden warmth -- pure white reads as overcast.
+        sun.light.color = .init(red: 1.0, green: 0.96, blue: 0.86, alpha: 1.0)
+        sun.shadow = DirectionalLightComponent.Shadow(
             maximumDistance: max(50, span * 1.5),
-            depthBias      : 5
+            depthBias      : 6
         )
         sun.orientation = simd_quatf(angle: -.pi / 3, axis: [1, 0, 0])
                         * simd_quatf(angle:  .pi / 6, axis: [0, 1, 0])
         sun.position    = SIMD3(mazeW / 2, span * 1.5, mazeH / 2)
         content.add(sun)
+
+        // Soft fill from the sky to keep shadowed corridors from
+        // going pitch black. Cool tone balances the warm sun.
+        let fill = DirectionalLight()
+        fill.light.intensity = 1800
+        fill.light.color = .init(red: 0.7, green: 0.8, blue: 1.0, alpha: 1.0)
+        fill.orientation = simd_quatf(angle: .pi / 4, axis: [1, 0, 0])
+        content.add(fill)
 
         // camera + player
         cameraEntity.camera.fieldOfViewInDegrees = 70
@@ -665,6 +684,134 @@ struct Maze3DView: View {
         #else
         return .green
         #endif
+    }
+
+    private var skyGradientColors: [Color] {
+        // Bottom = warm horizon, top = deep zenith. Dimmer in dark
+        // mode so the sky doesn't blast a white phone.
+        if scheme == .dark {
+            return [
+                Color(red: 0.30, green: 0.42, blue: 0.55),
+                Color(red: 0.08, green: 0.14, blue: 0.25)
+            ]
+        } else {
+            return [
+                Color(red: 0.65, green: 0.80, blue: 0.95),
+                Color(red: 0.25, green: 0.50, blue: 0.85)
+            ]
+        }
+    }
+
+    // MARK: procedural materials
+
+    @MainActor
+    private func hedgeMaterial() -> RealityKit.Material {
+        if let tex = generateLeafTexture() {
+            var m = PhysicallyBasedMaterial()
+            m.baseColor = .init(texture: .init(tex))
+            m.roughness = .init(floatLiteral: 0.95)
+            m.metallic  = .init(floatLiteral: 0.00)
+            return m
+        }
+        return SimpleMaterial(color: hedgeColor,
+                              roughness: 0.85, isMetallic: false)
+    }
+
+    @MainActor
+    private func floorMaterial() -> RealityKit.Material {
+        if let tex = generateFloorTexture() {
+            var m = PhysicallyBasedMaterial()
+            m.baseColor = .init(texture: .init(tex))
+            m.roughness = .init(floatLiteral: 0.95)
+            m.metallic  = .init(floatLiteral: 0.00)
+            return m
+        }
+        return SimpleMaterial(color: .init(white: 0.55, alpha: 1.0),
+                              roughness: 0.95, isMetallic: false)
+    }
+
+    /// Dark-green base with thousands of small leaf-bright specks.
+    /// Reads plausibly leafy at any distance and avoids the
+    /// "painted block" look of a flat color.
+    @MainActor
+    private func generateLeafTexture(size: Int = 256) -> TextureResource? {
+        let cs = CGColorSpaceCreateDeviceRGB()
+        guard let ctx = CGContext(
+            data            : nil,
+            width           : size,
+            height          : size,
+            bitsPerComponent: 8,
+            bytesPerRow     : 0,
+            space           : cs,
+            bitmapInfo      : CGImageAlphaInfo.premultipliedLast.rawValue
+        ) else { return nil }
+
+        ctx.setFillColor(CGColor(red: 0.07, green: 0.22, blue: 0.08, alpha: 1.0))
+        ctx.fill(CGRect(x: 0, y: 0, width: size, height: size))
+
+        var rng = SystemRandomNumberGenerator()
+        for _ in 0..<3500 {
+            let x = Double.random(in: 0..<Double(size), using: &rng)
+            let y = Double.random(in: 0..<Double(size), using: &rng)
+            let r = Double.random(in: 0.8..<3.5, using: &rng)
+            let bright = Double.random(in: 0.0..<1.0, using: &rng)
+            ctx.setFillColor(CGColor(
+                red  : 0.05 + bright * 0.18,
+                green: 0.22 + bright * 0.45,
+                blue : 0.05 + bright * 0.15,
+                alpha: 1.0
+            ))
+            ctx.fillEllipse(in: CGRect(
+                x: x - r/2, y: y - r/2, width: r, height: r
+            ))
+        }
+
+        guard let cg = ctx.makeImage() else { return nil }
+        return try? TextureResource(
+            image  : cg,
+            options: TextureResource.CreateOptions(semantic: .color)
+        )
+    }
+
+    /// Warm beige base with darker pebbles -- packed-earth path.
+    @MainActor
+    private func generateFloorTexture(size: Int = 256) -> TextureResource? {
+        let cs = CGColorSpaceCreateDeviceRGB()
+        guard let ctx = CGContext(
+            data            : nil,
+            width           : size,
+            height          : size,
+            bitsPerComponent: 8,
+            bytesPerRow     : 0,
+            space           : cs,
+            bitmapInfo      : CGImageAlphaInfo.premultipliedLast.rawValue
+        ) else { return nil }
+
+        ctx.setFillColor(CGColor(red: 0.55, green: 0.50, blue: 0.40, alpha: 1.0))
+        ctx.fill(CGRect(x: 0, y: 0, width: size, height: size))
+
+        var rng = SystemRandomNumberGenerator()
+        for _ in 0..<2200 {
+            let x  = Double.random(in: 0..<Double(size), using: &rng)
+            let y  = Double.random(in: 0..<Double(size), using: &rng)
+            let r  = Double.random(in: 0.8..<3.0, using: &rng)
+            let dn = Double.random(in: -0.15..<0.15, using: &rng)
+            ctx.setFillColor(CGColor(
+                red  : 0.55 + dn,
+                green: 0.50 + dn,
+                blue : 0.40 + dn,
+                alpha: 1.0
+            ))
+            ctx.fillEllipse(in: CGRect(
+                x: x - r/2, y: y - r/2, width: r, height: r
+            ))
+        }
+
+        guard let cg = ctx.makeImage() else { return nil }
+        return try? TextureResource(
+            image  : cg,
+            options: TextureResource.CreateOptions(semantic: .color)
+        )
     }
 }
 
