@@ -80,13 +80,17 @@ struct ControlsView: View {
 
     @ViewBuilder
     private var buttons: some View {
-        // No explicit minWidth -- the Label sizes to its content
-        // (~85 / ~65 pt) so the action row keeps headroom for the
-        // icon column on the right.
+        // lineLimit(1) + fixedSize on the horizontal axis is
+        // CRITICAL: without it the labels wrap when space is tight,
+        // which changes the controls-bar height, which changes the
+        // canvas size, which (via .onChange(of: geo.size)) triggers
+        // viewModel.generate() -- ad nauseam. Don't loosen these.
         Button {
             viewModel.generate()
         } label: {
             Label("Generate", systemImage: "arrow.clockwise")
+                .lineLimit(1)
+                .fixedSize(horizontal: true, vertical: false)
         }
         .buttonStyle(.borderedProminent)
         .disabled(viewModel.isGenerating)
@@ -95,6 +99,8 @@ struct ControlsView: View {
             viewModel.solve()
         } label: {
             Label("Solve", systemImage: "scope")
+                .lineLimit(1)
+                .fixedSize(horizontal: true, vertical: false)
         }
         .buttonStyle(.bordered)
         .disabled(viewModel.maze == nil || viewModel.isGenerating || viewModel.isSolving)
@@ -197,6 +203,9 @@ struct ControlsView: View {
 
     @ViewBuilder
     private var shareButton: some View {
+        // Always present (a placeholder when there's nothing to
+        // share) so the icon column doesn't reshape mid-generation
+        // and start a layout feedback loop.
         if let url = currentShareURL {
             ShareLink(item: url,
                       preview: SharePreview("Maze \(viewModel.width)×\(viewModel.height)")) {
@@ -206,25 +215,31 @@ struct ControlsView: View {
                     .contentShape(Rectangle())
             }
             .accessibilityLabel("Share this maze")
+        } else {
+            Image(systemName: "square.and.arrow.up")
+                .font(.title3)
+                .frame(width: tapTarget, height: tapTarget)
+                .foregroundStyle(.tertiary)
+                .accessibilityHidden(true)
         }
     }
 
-    @ViewBuilder
     private var walkButton: some View {
-        // Hide until the first generation lands -- there's nothing
-        // to walk through before then.
-        if viewModel.maze != nil {
-            Button {
-                showing3D = true
-            } label: {
-                Image(systemName: "figure.walk")
-                    .font(.title3)
-                    .frame(width: tapTarget, height: tapTarget)
-                    .contentShape(Rectangle())
-            }
-            .buttonStyle(.borderless)
-            .accessibilityLabel("Walk the maze in 3D")
+        // Always present in the layout so the icon column width
+        // doesn't shift when a maze appears / disappears -- a width
+        // shift propagates into a canvas height delta which used to
+        // re-fire generate() in a loop.
+        Button {
+            showing3D = true
+        } label: {
+            Image(systemName: "figure.walk")
+                .font(.title3)
+                .frame(width: tapTarget, height: tapTarget)
+                .contentShape(Rectangle())
         }
+        .buttonStyle(.borderless)
+        .accessibilityLabel("Walk the maze in 3D")
+        .disabled(viewModel.maze == nil)
     }
 
     private var libraryButton: some View {
