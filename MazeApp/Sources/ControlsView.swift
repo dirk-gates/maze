@@ -142,6 +142,8 @@ struct ControlsView: View {
     }
 
     /// "−" : fewer rows/columns (cells get bigger, fitting fewer).
+    /// Stays active during generation -- a tap cancels the in-flight
+    /// run and restarts at the new density.
     private var fewerCellsButton: some View {
         Button { viewModel.zoom(by: zoomStep) } label: {
             Image(systemName: "minus")
@@ -150,10 +152,10 @@ struct ControlsView: View {
         .buttonStyle(.bordered)
         .buttonBorderShape(.circle)
         .accessibilityLabel("Fewer rows and columns")
-        .disabled(viewModel.isGenerating)
     }
 
     /// "+" : more rows/columns (cells get smaller, fitting more).
+    /// Stays active during generation -- see fewerCellsButton.
     private var moreCellsButton: some View {
         Button { viewModel.zoom(by: 1.0 / zoomStep) } label: {
             Image(systemName: "plus")
@@ -162,7 +164,6 @@ struct ControlsView: View {
         .buttonStyle(.bordered)
         .buttonBorderShape(.circle)
         .accessibilityLabel("More rows and columns")
-        .disabled(viewModel.isGenerating)
     }
 
     private var libraryButton: some View {
