@@ -171,13 +171,44 @@ final class MazeViewModel {
             lookAheadDepth: lookAheadDepth,
             seed          : seed
         )
-        let stream    = Generator(params).generate()
-        // Snapshot once so a mid-run slider tweak doesn't switch
-        // modes partway through. The "instant" path skips per-event
-        // SwiftUI churn, which is what dominates total time on
-        // large mazes -- thousands of @Observable mutations cost
-        // far more than the carving algorithm itself.
-        let isInstant = animationSpeed >= instantThreshold
+        let stream     = Generator(params).generate()
+        let isInstant  = animationSpeed >= instantThreshold
+        let totalCells = max(1, width * height)
+
+        // -------- pacing snapshot --------
+        // Slider is mapped to a TARGET total animation time (seconds)
+        // via a power curve: pegged-down ≈ 60s, ramps quickly toward
+        // the top so a single tap below pegged is a few seconds.
+        // Per-cell delay is then derived from target / cells, with
+        // batched flushes capped at 60fps so the per-event SwiftUI
+        // overhead can never dominate the total time -- which is
+        // what made "one click below pegged" feel like minutes on
+        // large mazes.
+        let targetSecs    = isInstant ? 0 : targetTotalSecs(slider: animationSpeed)
+        let targetMs      = targetSecs * 1000.0
+        // Cap frames at totalCells (no point flushing more often
+        // than there are events) and at 60fps × targetSecs.
+        let maxFps        = 60.0
+        let frames        = max(1, min(totalCells, Int(ceil(targetSecs * maxFps))))
+        let frameDelayMs  = targetMs / Double(frames)
+        let cellsPerFrame = max(1, Int(ceil(Double(totalCells) / Double(frames))))
+
+        var pendingCells : [Coord]         = []
+        var pendingOpens : [MazeKit.Edge]  = []
+        var pendingCloses: [MazeKit.Edge]  = []
+        pendingCells.reserveCapacity(cellsPerFrame * 2)
+
+        @MainActor func flushPending() {
+            if !pendingCells.isEmpty {
+                for c in pendingCells { carvedCells.insert(c) }
+                statsLine = "\(carvedCells.count) cells carved"
+                pendingCells.removeAll(keepingCapacity: true)
+            }
+            for e in pendingOpens  { openWalls.insert(e) }
+            for e in pendingCloses { openWalls.remove(e) }
+            pendingOpens.removeAll (keepingCapacity: true)
+            pendingCloses.removeAll(keepingCapacity: true)
+        }
 
         for await event in stream {
             if Task.isCancelled { break }
@@ -198,10 +229,9 @@ final class MazeViewModel {
                 continue
             }
 
-            await delayPerCell()
-
             switch event {
             case .attempt(let n):
+                flushPending()
                 attemptCount = n
                 carvedCells.removeAll()
                 openWalls.removeAll()
@@ -209,26 +239,47 @@ final class MazeViewModel {
                 exitGate     = nil
                 statsLine = "attempt \(n)…"
             case .carved(let c):
-                carvedCells.insert(c)
-                statsLine = "\(carvedCells.count) cells carved"
-                Haptics.shared.carveTick()
+                pendingCells.append(c)
+                if pendingCells.count >= cellsPerFrame {
+                    flushPending()
+                    Haptics.shared.carveTick()
+                    await sleepMs(frameDelayMs)
+                }
             case .opened(let edge):
-                openWalls.insert(edge)
+                pendingOpens.append(edge)
             case .closed(let edge):
-                openWalls.remove(edge)
+                pendingCloses.append(edge)
             case .gates(let entrance, let exit):
+                flushPending()
                 entranceGate = entrance
                 exitGate     = exit
                 Haptics.shared.milestone()
             case .considering, .pushed:
                 break
             case .finished(let m):
+                flushPending()
                 maze      = m
                 statsLine = "\(carvedCells.count) cells, "
                           + "solution \(m.solution?.count ?? 0)"
                 appendToLibrary(m, seed: seed)
             }
         }
+    }
+
+    /// Map the slider position to a target TOTAL animation time
+    /// (seconds, excluding compute). Tiered curve: pegged-down is
+    /// ~60s; one click below pegged-up is a few seconds. Power
+    /// 0.7 spreads the short times across the top of the slider so
+    /// one tap of the rabbit/turtle = a noticeable change up there.
+    private func targetTotalSecs(slider: Double) -> Double {
+        let normalized = max(0, min(1, (instantThreshold - slider) / instantThreshold))
+        let maxSecs    = 60.0
+        return maxSecs * pow(normalized, 0.7)
+    }
+
+    private func sleepMs(_ ms: Double) async {
+        if ms <= 0 { return }
+        try? await Task.sleep(nanoseconds: UInt64(ms * 1_000_000))
     }
 
     /// Fill carvedCells, openWalls, entranceGate, exitGate from a
@@ -285,7 +336,7 @@ final class MazeViewModel {
 
         for await event in Solver().solve(maze) {
             if Task.isCancelled { break }
-            await delayPerCell()
+            await solveDelay()
             switch event {
             case .visited(let c):
                 solutionPath.append(c)
@@ -308,14 +359,14 @@ final class MazeViewModel {
     /// cleanly on 1.0 with the 0.025 step).
     fileprivate let instantThreshold = 0.99
 
-    private func delayPerCell() async {
-        // Slider response: log curve from 150ms (slow) down to 1ms
-        // (almost-pegged). Above instantThreshold the runner takes
-        // the no-animation fast path, so this branch only handles
-        // animated speeds.
+    /// Per-step delay in the SOLVE animation. Solve is so cheap
+    /// (one cell per event, no compute heft) that the old log curve
+    /// is fine here -- only generation needs the batched-frame
+    /// pacing scheme.
+    private func solveDelay() async {
         if animationSpeed >= instantThreshold { return }
         let t     = animationSpeed / instantThreshold
-        let maxMs = 150.0
+        let maxMs = 80.0
         let minMs = 1.0
         let ms    = maxMs * pow(minMs / maxMs, t)
         try? await Task.sleep(nanoseconds: UInt64(ms * 1_000_000))
