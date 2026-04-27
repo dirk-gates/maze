@@ -46,13 +46,14 @@ struct ControlsView: View {
                 libraryButton
                 settingsButton
             }
-            // Zoom on the same row as the slider so each control has
-            // a proper hit target. Putting zoom on the action row was
-            // cramming everything into a strip that was hard to tap.
+            // Density on the same row as the slider so each control
+            // has a proper hit target. Putting density on the action
+            // row was cramming everything into a strip that was hard
+            // to tap.
             HStack(spacing: 8) {
-                zoomOutButton
+                fewerCellsButton
                 speedControl
-                zoomInButton
+                moreCellsButton
             }
         }
     }
@@ -119,43 +120,46 @@ struct ControlsView: View {
         }
     }
 
-    /// Each zoom tap multiplies targetUnitPx by this factor (or 1/this).
-    /// 1.2 = ~20% per tap, ~3 taps to roughly halve/double cell count.
+    /// Each density tap multiplies targetUnitPx by this factor (or
+    /// 1/this). 1.2 = ~20% per tap, ~3 taps to roughly halve/double
+    /// cell count. + makes cells smaller (more rows/columns); - makes
+    /// them bigger (fewer rows/columns).
     private let zoomStep = 1.2
 
-    /// 44pt minimum hit target -- Apple HIG. The earlier inline icons
-    /// were ~16pt and effectively un-tappable on iPhone.
+    /// 44pt minimum hit target -- Apple HIG.
     private let tapTarget: CGFloat = 44
 
     @ViewBuilder
     private var zoomControls: some View {
-        HStack(spacing: 4) {
-            zoomOutButton
-            zoomInButton
+        HStack(spacing: 8) {
+            fewerCellsButton
+            moreCellsButton
         }
     }
 
-    private var zoomOutButton: some View {
-        Button { viewModel.zoom(by: 1.0 / zoomStep) } label: {
-            Image(systemName: "minus.magnifyingglass")
-                .font(.title3)
+    /// "−" : fewer rows/columns (cells get bigger, fitting fewer).
+    private var fewerCellsButton: some View {
+        Button { viewModel.zoom(by: zoomStep) } label: {
+            Image(systemName: "minus")
+                .font(.body.weight(.semibold))
                 .frame(width: tapTarget, height: tapTarget)
-                .contentShape(Rectangle())
         }
-        .buttonStyle(.borderless)
-        .accessibilityLabel("Zoom out")
+        .buttonStyle(.bordered)
+        .buttonBorderShape(.circle)
+        .accessibilityLabel("Fewer rows and columns")
         .disabled(viewModel.isGenerating)
     }
 
-    private var zoomInButton: some View {
-        Button { viewModel.zoom(by: zoomStep) } label: {
-            Image(systemName: "plus.magnifyingglass")
-                .font(.title3)
+    /// "+" : more rows/columns (cells get smaller, fitting more).
+    private var moreCellsButton: some View {
+        Button { viewModel.zoom(by: 1.0 / zoomStep) } label: {
+            Image(systemName: "plus")
+                .font(.body.weight(.semibold))
                 .frame(width: tapTarget, height: tapTarget)
-                .contentShape(Rectangle())
         }
-        .buttonStyle(.borderless)
-        .accessibilityLabel("Zoom in")
+        .buttonStyle(.bordered)
+        .buttonBorderShape(.circle)
+        .accessibilityLabel("More rows and columns")
         .disabled(viewModel.isGenerating)
     }
 
