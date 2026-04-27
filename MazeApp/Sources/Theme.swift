@@ -6,38 +6,33 @@
 import SwiftUI
 
 struct Theme: Sendable {
-    /// Color filling the area outside the maze (and visually merging
-    /// with carved cells, since they're the same color).
     var background : Color
-
-    /// Color of unrebreached "material" the maze is carved from. In
-    /// dark mode this is white (creating a chalkboard effect); in
-    /// light mode this is black (creating a printed-on-paper look).
+    /// "Top" of the hedge wall -- the lit color the camera sees.
     var material   : Color
-
-    /// Color of carved cells and opened wall slots. Equal to
-    /// `background` so the "carved" feels like an absence of material.
+    /// "Shaded side" of the hedge -- a darker variant drawn offset
+    /// down-right of the top to fake an extruded 3D wall in 2D.
+    var wallShadow : Color
     var carved     : Color
-
-    /// Color of the solution path stroke.
     var solution   : Color
 
     static func classic(_ scheme: ColorScheme) -> Theme {
-        // Walls = hedge green to match the 3D walk view's hedge
-        // texture. Solution = blue, matching the 3D walk view's
-        // cyan trail. Per-scheme saturation keeps things readable
-        // without buzzing.
+        // Walls = hedge green; wallShadow = a noticeably darker
+        // green drawn shifted down-right to suggest the hedge has
+        // height. Tuned per scheme so the shadow is visible against
+        // both the white and black floor.
         switch scheme {
         case .dark:
             return Theme(
                 background : .black,
                 material   : Color(red: 0.30, green: 0.60, blue: 0.25),
+                wallShadow : Color(red: 0.10, green: 0.25, blue: 0.08),
                 carved     : .black,
                 solution   : Color(red: 0.30, green: 0.75, blue: 1.00))
         default:
             return Theme(
                 background : .white,
                 material   : Color(red: 0.18, green: 0.45, blue: 0.18),
+                wallShadow : Color(red: 0.07, green: 0.20, blue: 0.07),
                 carved     : .white,
                 solution   : Color(red: 0.00, green: 0.45, blue: 0.95))
         }

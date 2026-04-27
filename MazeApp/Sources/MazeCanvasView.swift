@@ -92,23 +92,21 @@ struct MazeCanvasView: View {
         }
 
         // -------- walls = (maze rect) − (carved path) --------
-        // Drawn inside a layer with a soft drop shadow so the
-        // shadow lands on the path floor we filled above. Reads
-        // as "walls have height" without needing real 3D.
+        // Fake-3D extrusion: draw the walls TWICE.
+        //   1) A darker copy shifted down-right: reads as the
+        //      "shaded side" of the hedge.
+        //   2) The original on top: the "lit top" of the hedge.
+        // Works in both light and dark mode because both colors
+        // come from the wall material, not the floor.
         let mazeRectPath = Path(CGRect(x: ox, y: oy, width: mazeW, height: mazeH))
         let wallsPath    = mazeRectPath.subtracting(carvedPath)
 
-        let shadowOffset = max(1.5, ws * 0.6)
-        let shadowRadius = max(2.0, ws * 1.0)
+        let extrude = max(2.0, ws * 0.9)
         context.drawLayer { layer in
-            layer.addFilter(.shadow(
-                color : .black.opacity(0.45),
-                radius: shadowRadius,
-                x     : shadowOffset,
-                y     : shadowOffset
-            ))
-            layer.fill(wallsPath, with: .color(theme.material))
+            layer.translateBy(x: extrude, y: extrude)
+            layer.fill(wallsPath, with: .color(theme.wallShadow))
         }
+        context.fill(wallsPath, with: .color(theme.material))
 
         // -------- solution path (themed stroke through cell centers) --------
         let cellsDrawn = min(viewModel.solveProgress, viewModel.solutionPath.count)
