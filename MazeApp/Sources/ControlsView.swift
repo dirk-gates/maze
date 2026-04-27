@@ -43,11 +43,17 @@ struct ControlsView: View {
                 buttons
                 Spacer()
                 stats
-                zoomControls
                 libraryButton
                 settingsButton
             }
-            speedControl
+            // Zoom on the same row as the slider so each control has
+            // a proper hit target. Putting zoom on the action row was
+            // cramming everything into a strip that was hard to tap.
+            HStack(spacing: 8) {
+                zoomOutButton
+                speedControl
+                zoomInButton
+            }
         }
     }
 
@@ -117,23 +123,39 @@ struct ControlsView: View {
     /// 1.2 = ~20% per tap, ~3 taps to roughly halve/double cell count.
     private let zoomStep = 1.2
 
+    /// 44pt minimum hit target -- Apple HIG. The earlier inline icons
+    /// were ~16pt and effectively un-tappable on iPhone.
+    private let tapTarget: CGFloat = 44
+
     @ViewBuilder
     private var zoomControls: some View {
         HStack(spacing: 4) {
-            Button { viewModel.zoom(by: 1.0 / zoomStep) } label: {
-                Image(systemName: "minus.magnifyingglass")
-                    .font(.title3)
-            }
-            .buttonStyle(.borderless)
-            .accessibilityLabel("Zoom out")
-
-            Button { viewModel.zoom(by: zoomStep) } label: {
-                Image(systemName: "plus.magnifyingglass")
-                    .font(.title3)
-            }
-            .buttonStyle(.borderless)
-            .accessibilityLabel("Zoom in")
+            zoomOutButton
+            zoomInButton
         }
+    }
+
+    private var zoomOutButton: some View {
+        Button { viewModel.zoom(by: 1.0 / zoomStep) } label: {
+            Image(systemName: "minus.magnifyingglass")
+                .font(.title3)
+                .frame(width: tapTarget, height: tapTarget)
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.borderless)
+        .accessibilityLabel("Zoom out")
+        .disabled(viewModel.isGenerating)
+    }
+
+    private var zoomInButton: some View {
+        Button { viewModel.zoom(by: zoomStep) } label: {
+            Image(systemName: "plus.magnifyingglass")
+                .font(.title3)
+                .frame(width: tapTarget, height: tapTarget)
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.borderless)
+        .accessibilityLabel("Zoom in")
         .disabled(viewModel.isGenerating)
     }
 
@@ -143,6 +165,8 @@ struct ControlsView: View {
         } label: {
             Image(systemName: "clock.arrow.circlepath")
                 .font(.title3)
+                .frame(width: tapTarget, height: tapTarget)
+                .contentShape(Rectangle())
         }
         .buttonStyle(.borderless)
         .accessibilityLabel("History")
@@ -154,6 +178,8 @@ struct ControlsView: View {
         } label: {
             Image(systemName: "slider.horizontal.3")
                 .font(.title3)
+                .frame(width: tapTarget, height: tapTarget)
+                .contentShape(Rectangle())
         }
         .buttonStyle(.borderless)
         .accessibilityLabel("Settings")
