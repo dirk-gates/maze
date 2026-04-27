@@ -252,18 +252,11 @@ struct Maze3DView: View {
                 _ = content
             }
             .ignoresSafeArea()
-            // Sky: a vertical gradient behind the RealityKit scene.
-            // RealityKit's scene has no skybox of its own, so the
-            // SwiftUI background reads as the sky around / above the
-            // maze whenever the player looks past the geometry.
-            // Horizon is warmer so it feels like outdoor daylight.
-            .background(
-                LinearGradient(
-                    colors    : skyGradientColors,
-                    startPoint: .bottom,
-                    endPoint  : .top
-                )
-            )
+            // Sky: prefer the bundled "Sky" photo, fall back to a
+            // gradient. RealityKit's scene is transparent where
+            // there's no geometry, so the SwiftUI background reads
+            // through whenever the player looks above the maze.
+            .background(skyBackground)
 
             #if os(iOS)
             // PUBG-style: full-screen drag-to-look. Sits BELOW the
@@ -325,6 +318,25 @@ struct Maze3DView: View {
             aabbs.append(WallAABB(
                 minX: cx - wx / 2, maxX: cx + wx / 2,
                 minZ: cz - wz / 2, maxZ: cz + wz / 2
+            ))
+        }
+
+        // Corner pillars at every grid intersection where a wall
+        // ends. Each wall slab fills a wallThickness/2 strip
+        // around its grid line; at L / T / + junctions one or
+        // more quadrants of the corner are uncovered, leaving a
+        // visible notch out of the hedge. A wallT × wallT pillar
+        // at each shared endpoint plugs every notch.
+        let cornerMesh = MeshResource.generateBox(size: SIMD3(
+            wallThickness, wallHeight, wallThickness
+        ))
+        for (cx, cz) in cornerPositions() {
+            let pillar = ModelEntity(mesh: cornerMesh, materials: [wallMat])
+            pillar.position = SIMD3(cx, wallHeight / 2, cz)
+            wallRoot.addChild(pillar)
+            aabbs.append(WallAABB(
+                minX: cx - wallThickness / 2, maxX: cx + wallThickness / 2,
+                minZ: cz - wallThickness / 2, maxZ: cz + wallThickness / 2
             ))
         }
         walls = aabbs
@@ -483,6 +495,54 @@ struct Maze3DView: View {
         )
         pad.position = SIMD3(x, 0.011, z)
         content.add(pad)
+    }
+
+    /// Every grid intersection (in world coords) that's an endpoint
+    /// of at least one wall slab in the current maze. Used to place
+    /// corner pillars and plug the notches that appear where two
+    /// or more walls meet.
+    private func cornerPositions() -> [(Float, Float)] {
+        var keys = Set<SIMD2<Int>>()
+
+        // Top-edge walls: each cell-x without an entrance gap drops
+        // endpoints at (x, 0) and (x+1, 0).
+        for x in 0..<maze.width where x != maze.entrance.x {
+            keys.insert(SIMD2(x,     0))
+            keys.insert(SIMD2(x + 1, 0))
+        }
+        // Bottom-edge walls: same, except the exit cell.
+        for x in 0..<maze.width where x != maze.exit.x {
+            keys.insert(SIMD2(x,     maze.height))
+            keys.insert(SIMD2(x + 1, maze.height))
+        }
+        // Left + right edge walls: per row.
+        for y in 0..<maze.height {
+            keys.insert(SIMD2(0,           y))
+            keys.insert(SIMD2(0,           y + 1))
+            keys.insert(SIMD2(maze.width,  y))
+            keys.insert(SIMD2(maze.width,  y + 1))
+        }
+        // Interior walls: each east / south slab adds two endpoints.
+        for y in 0..<maze.height {
+            for x in 0..<maze.width {
+                let here = Coord(x: x, y: y)
+                if x + 1 < maze.width {
+                    let east = Coord(x: x + 1, y: y)
+                    if maze.wall(between: here, east) {
+                        keys.insert(SIMD2(x + 1, y))
+                        keys.insert(SIMD2(x + 1, y + 1))
+                    }
+                }
+                if y + 1 < maze.height {
+                    let south = Coord(x: x, y: y + 1)
+                    if maze.wall(between: here, south) {
+                        keys.insert(SIMD2(x,     y + 1))
+                        keys.insert(SIMD2(x + 1, y + 1))
+                    }
+                }
+            }
+        }
+        return keys.map { (Float($0.x) * cellSize, Float($0.y) * cellSize) }
     }
 
     private func wallSlots() -> [(Float, Float, Float, Float)] {
@@ -691,8 +751,6 @@ struct Maze3DView: View {
     }
 
     private var skyGradientColors: [Color] {
-        // Bottom = warm horizon, top = deep zenith. Dimmer in dark
-        // mode so the sky doesn't blast a white phone.
         if scheme == .dark {
             return [
                 Color(red: 0.30, green: 0.42, blue: 0.55),
@@ -704,6 +762,35 @@ struct Maze3DView: View {
                 Color(red: 0.25, green: 0.50, blue: 0.85)
             ]
         }
+    }
+
+    /// Background view: bundled Sky photo when available, else a
+    /// scheme-aware gradient. Wrapping in a ViewBuilder lets us
+    /// swap a real photograph in just by adding the asset.
+    @ViewBuilder
+    private var skyBackground: some View {
+        #if os(iOS)
+        if let _ = UIImage(named: "Sky") {
+            Image("Sky")
+                .resizable()
+                .aspectRatio(contentMode: .fill)
+        } else {
+            LinearGradient(colors: skyGradientColors,
+                           startPoint: .bottom, endPoint: .top)
+        }
+        #elseif os(macOS)
+        if NSImage(named: "Sky") != nil {
+            Image("Sky")
+                .resizable()
+                .aspectRatio(contentMode: .fill)
+        } else {
+            LinearGradient(colors: skyGradientColors,
+                           startPoint: .bottom, endPoint: .top)
+        }
+        #else
+        LinearGradient(colors: skyGradientColors,
+                       startPoint: .bottom, endPoint: .top)
+        #endif
     }
 
     // MARK: procedural materials
