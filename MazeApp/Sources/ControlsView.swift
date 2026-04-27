@@ -10,6 +10,7 @@ struct ControlsView: View {
     @Bindable var viewModel: MazeViewModel
     @Binding var showingSettings: Bool
     @Binding var showingLibrary : Bool
+    @Binding var showing3D      : Bool
 
     var body: some View {
         ViewThatFits(in: .horizontal) {
@@ -37,6 +38,7 @@ struct ControlsView: View {
             speedControl.frame(minWidth: 200, maxWidth: .infinity)
             stats
             zoomControls
+            walkButton
             shareButton
             libraryButton
             settingsButton
@@ -49,6 +51,7 @@ struct ControlsView: View {
                 buttons
                 Spacer()
                 stats
+                walkButton
                 shareButton
                 libraryButton
                 settingsButton
@@ -194,6 +197,24 @@ struct ControlsView: View {
                     .contentShape(Rectangle())
             }
             .accessibilityLabel("Share this maze")
+        }
+    }
+
+    @ViewBuilder
+    private var walkButton: some View {
+        // Hide until the first generation lands -- there's nothing
+        // to walk through before then.
+        if viewModel.maze != nil {
+            Button {
+                showing3D = true
+            } label: {
+                Image(systemName: "figure.walk")
+                    .font(.title3)
+                    .frame(width: tapTarget, height: tapTarget)
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(.borderless)
+            .accessibilityLabel("Walk the maze in 3D")
         }
     }
 

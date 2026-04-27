@@ -18,6 +18,7 @@ struct ContentView: View {
     @Bindable var viewModel: MazeViewModel
     @State private var showingSettings  = false
     @State private var showingLibrary   = false
+    @State private var showing3D        = false
     @State private var didInitialLaunch = false
     @Environment(\.colorScheme) private var systemScheme
 
@@ -54,7 +55,8 @@ struct ContentView: View {
             ControlsView(
                 viewModel       : viewModel,
                 showingSettings : $showingSettings,
-                showingLibrary  : $showingLibrary
+                showingLibrary  : $showingLibrary,
+                showing3D       : $showing3D
             )
         }
         .background(theme.background)
@@ -70,6 +72,20 @@ struct ContentView: View {
         .sheet(isPresented: $showingLibrary) {
             LibraryView(viewModel: viewModel)
         }
+        #if os(iOS)
+        .fullScreenCover(isPresented: $showing3D) {
+            if let maze = viewModel.maze {
+                Maze3DView(maze: maze)
+            }
+        }
+        #else
+        .sheet(isPresented: $showing3D) {
+            if let maze = viewModel.maze {
+                Maze3DView(maze: maze)
+                    .frame(minWidth: 720, minHeight: 540)
+            }
+        }
+        #endif
         #if os(macOS)
         .onReceive(NotificationCenter.default.publisher(for: .mazeGenerate)) { _ in
             viewModel.generate()
