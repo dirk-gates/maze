@@ -369,6 +369,10 @@ struct Maze3DView: View {
         fill.orientation = simd_quatf(angle: .pi / 4, axis: [1, 0, 0])
         content.add(fill)
 
+        // Clouds drifting overhead -- alpha-blended planes that
+        // face down so the player sees them when looking up.
+        addClouds(into: content, mazeW: mazeW, mazeH: mazeH, span: span)
+
         // camera + player
         cameraEntity.camera.fieldOfViewInDegrees = 70
 
@@ -706,7 +710,13 @@ struct Maze3DView: View {
 
     @MainActor
     private func hedgeMaterial() -> RealityKit.Material {
-        if let tex = generateLeafTexture() {
+        // Prefer an asset-catalog photo named "Hedge" if present;
+        // fall back to procedural leaf noise. Drop a real hedge
+        // photo into MazeApp/Sources/Assets.xcassets named "Hedge"
+        // and the next build picks it up automatically.
+        let tex = (try? TextureResource.load(named: "Hedge"))
+                 ?? generateLeafTexture()
+        if let tex {
             var m = PhysicallyBasedMaterial()
             m.baseColor = .init(texture: .init(tex))
             m.roughness = .init(floatLiteral: 0.95)
@@ -719,7 +729,11 @@ struct Maze3DView: View {
 
     @MainActor
     private func floorMaterial() -> RealityKit.Material {
-        if let tex = generateFloorTexture() {
+        // Same fallback chain as hedgeMaterial -- "Floor" image in
+        // Assets.xcassets wins over the procedural pebble texture.
+        let tex = (try? TextureResource.load(named: "Floor"))
+                 ?? generateFloorTexture()
+        if let tex {
             var m = PhysicallyBasedMaterial()
             m.baseColor = .init(texture: .init(tex))
             m.roughness = .init(floatLiteral: 0.95)
@@ -764,6 +778,93 @@ struct Maze3DView: View {
             ctx.fillEllipse(in: CGRect(
                 x: x - r/2, y: y - r/2, width: r, height: r
             ))
+        }
+
+        guard let cg = ctx.makeImage() else { return nil }
+        return try? TextureResource(
+            image  : cg,
+            options: TextureResource.CreateOptions(semantic: .color)
+        )
+    }
+
+    /// Scatter cloud-billboards above the maze. Each is a flat
+    /// plane facing down, alpha-blended over the sky gradient.
+    /// Looks great when the player looks up while flying.
+    @MainActor
+    private func addClouds(into content: any RealityViewContentProtocol,
+                           mazeW: Float, mazeH: Float, span: Float)
+    {
+        // Try to load a bundled "Sky" / cloud asset first; fall
+        // back to a procedurally generated puffy white shape.
+        let cloudTex = (try? TextureResource.load(named: "Sky"))
+                     ?? generateCloudTexture()
+        guard let cloudTex else { return }
+
+        var mat = UnlitMaterial()
+        mat.color = .init(texture: .init(cloudTex))
+        // Treat the texture's alpha channel as transparency so the
+        // soft cloud edges blend into the sky.
+        mat.blending = .transparent(opacity: .init(floatLiteral: 1.0))
+
+        var rng = SystemRandomNumberGenerator()
+        let cloudCount = 24
+        for _ in 0..<cloudCount {
+            let cw = Float.random(in: 8 ..< 22, using: &rng)
+            let cd = cw * Float.random(in: 0.55 ..< 0.85, using: &rng)
+            let cx = Float.random(in: -span * 0.6 ..< mazeW + span * 0.6, using: &rng)
+            let cz = Float.random(in: -span * 0.6 ..< mazeH + span * 0.6, using: &rng)
+            let cy = Float.random(in: 28 ..< 55, using: &rng)
+            let cloud = ModelEntity(
+                mesh: .generatePlane(width: cw, depth: cd),
+                materials: [mat]
+            )
+            cloud.position = SIMD3(cx, cy, cz)
+            // Default plane faces +Y (up). Rotate by π around X so
+            // the textured side faces -Y (down) toward the player.
+            cloud.orientation = simd_quatf(angle: .pi, axis: [1, 0, 0])
+            content.add(cloud)
+        }
+    }
+
+    /// Procedural cloud texture: stacked soft white radial blobs
+    /// on a transparent background. Renders as a puffy shape with
+    /// soft edges that blend into the sky.
+    @MainActor
+    private func generateCloudTexture(size: Int = 256) -> TextureResource? {
+        let cs = CGColorSpaceCreateDeviceRGB()
+        guard let ctx = CGContext(
+            data            : nil,
+            width           : size,
+            height          : size,
+            bitsPerComponent: 8,
+            bytesPerRow     : 0,
+            space           : cs,
+            bitmapInfo      : CGImageAlphaInfo.premultipliedLast.rawValue
+        ) else { return nil }
+
+        ctx.clear(CGRect(x: 0, y: 0, width: size, height: size))
+
+        let cw = Double(size)
+        var rng = SystemRandomNumberGenerator()
+        let bumps = 9
+        for _ in 0..<bumps {
+            let cx = Double.random(in: cw * 0.20 ..< cw * 0.80, using: &rng)
+            let cy = Double.random(in: cw * 0.40 ..< cw * 0.60, using: &rng)
+            let radius = Double.random(in: cw * 0.14 ..< cw * 0.28, using: &rng)
+            guard let gradient = CGGradient(
+                colorsSpace: cs,
+                colors    : [
+                    CGColor(red: 1, green: 1, blue: 1, alpha: 0.95),
+                    CGColor(red: 1, green: 1, blue: 1, alpha: 0.00)
+                ] as CFArray,
+                locations : [0, 1]
+            ) else { return nil }
+            ctx.drawRadialGradient(
+                gradient,
+                startCenter: CGPoint(x: cx, y: cy), startRadius: 0,
+                endCenter  : CGPoint(x: cx, y: cy), endRadius: CGFloat(radius),
+                options    : []
+            )
         }
 
         guard let cg = ctx.makeImage() else { return nil }
