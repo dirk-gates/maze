@@ -11,10 +11,12 @@ Package.resolved
 DerivedData/
 build/
 MazeApp/build/
-*.xcuserdata
-*.xcodeproj/xcuserdata/
-*.xcodeproj/project.xcworkspace/xcuserdata/
-*.xcworkspace/xcuserdata/
+# xcuserdata holds per-user IDE state (window positions, breakpoints,
+# scheme management). Use ** so the patterns match nested project
+# locations like MazeApp/Maze.xcodeproj/...
+**/xcuserdata/
+**/*.xcuserdata
+**/*.xcuserstate
 *.swp
 
 # macOS
