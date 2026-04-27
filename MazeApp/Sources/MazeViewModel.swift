@@ -302,17 +302,17 @@ final class MazeViewModel {
 
     /// Slider position at and above which we treat generation as
     /// "skip animation" -- no per-cell delay AND we collapse the
-    /// per-event UI churn into one batch update at .finished.
-    fileprivate let instantThreshold = 0.95
+    /// per-event UI churn into one batch update at .finished. Set
+    /// to 0.99 so only a pegged-right slider triggers instant;
+    /// anything below stays animated (rabbit-tap from 0.975 lands
+    /// cleanly on 1.0 with the 0.025 step).
+    fileprivate let instantThreshold = 0.99
 
     private func delayPerCell() async {
-        // Slider response: log curve over a wider range (150ms..1ms),
-        // with the top 5% mapped to instant. The wider range gives
-        // more dynamic range at both ends -- slow is genuinely slow
-        // (~7 cells/sec) so the slider has room to act when per-cell
-        // compute is heavy (e.g. high look-ahead), and the narrower
-        // instant zone leaves more taps separating "very fast" from
-        // "skip animation".
+        // Slider response: log curve from 150ms (slow) down to 1ms
+        // (almost-pegged). Above instantThreshold the runner takes
+        // the no-animation fast path, so this branch only handles
+        // animated speeds.
         if animationSpeed >= instantThreshold { return }
         let t     = animationSpeed / instantThreshold
         let maxMs = 150.0
