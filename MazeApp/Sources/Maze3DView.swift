@@ -314,7 +314,8 @@ struct Maze3DView: View {
         content.add(wallRoot)
 
         var aabbs: [WallAABB] = []
-        for (cx, cz, wx, wz) in wallSlots() {
+        let (slots, corners) = wallSlotsAndCorners()
+        for (cx, cz, wx, wz) in slots {
             let mesh   = MeshResource.generateBox(size: SIMD3(wx, wallHeight, wz))
             let entity = ModelEntity(mesh: mesh, materials: [wallMat])
             entity.position = SIMD3(cx, wallHeight / 2, cz)
@@ -325,16 +326,13 @@ struct Maze3DView: View {
             ))
         }
 
-        // Corner pillars at every grid intersection where a wall
-        // ends. Each wall slab fills a wallThickness/2 strip
-        // around its grid line; at L / T / + junctions one or
-        // more quadrants of the corner are uncovered, leaving a
-        // visible notch out of the hedge. A wallT × wallT pillar
-        // at each shared endpoint plugs every notch.
+        // Corner pillars only at TRUE corners (intersections where
+        // walls along both axes converge). Continuation points get
+        // no pillar -- the slabs touch directly there.
         let cornerMesh = MeshResource.generateBox(size: SIMD3(
             wallThickness, wallHeight, wallThickness
         ))
-        for (cx, cz) in cornerPositions() {
+        for (cx, cz) in corners {
             let pillar = ModelEntity(mesh: cornerMesh, materials: [wallMat])
             pillar.position = SIMD3(cx, wallHeight / 2, cz)
             wallRoot.addChild(pillar)
@@ -504,52 +502,100 @@ struct Maze3DView: View {
         content.add(pad)
     }
 
-    /// Every grid intersection (in world coords) that's an endpoint
-    /// of at least one wall slab in the current maze. Used to place
-    /// corner pillars and plug the notches that appear where two
-    /// or more walls meet.
-    private func cornerPositions() -> [(Float, Float)] {
-        var keys = Set<SIMD2<Int>>()
+    /// Walls + pillars in one pass.
+    ///
+    /// A pillar is needed ONLY at intersections where walls along
+    /// both axes (X-run and Z-run) converge -- i.e. true L / T / +
+    /// junctions. At "continuation" points where two collinear
+    /// slabs meet (e.g. two top-edge walls at adjacent cells with
+    /// no perpendicular wall between them), the slabs touch each
+    /// other directly and no pillar is placed -- otherwise the
+    /// pillar's wallT-wide face would render the full hedge
+    /// texture squashed into 0.18 units, which reads as a visible
+    /// vertical seam in the middle of the wall.
+    ///
+    /// Each slab is shortened by `wallThickness/2` ONLY at ends
+    /// where a pillar is placed; ends that are collinear
+    /// continuations stay flush with the grid line so adjacent
+    /// slabs meet seam-to-seam.
+    private func wallSlotsAndCorners() ->
+        (slots: [(Float, Float, Float, Float)], corners: [(Float, Float)])
+    {
+        struct Run {
+            let start: SIMD2<Int>
+            let end  : SIMD2<Int>
+            let isXRun: Bool   // true = wall length runs along X axis
+        }
+        var runs    = [Run]()
+        var xKeys   = Set<SIMD2<Int>>()
+        var zKeys   = Set<SIMD2<Int>>()
 
-        // Top-edge walls: each cell-x without an entrance gap drops
-        // endpoints at (x, 0) and (x+1, 0).
+        @inline(__always) func addX(_ s: SIMD2<Int>, _ e: SIMD2<Int>) {
+            runs.append(Run(start: s, end: e, isXRun: true))
+            xKeys.insert(s); xKeys.insert(e)
+        }
+        @inline(__always) func addZ(_ s: SIMD2<Int>, _ e: SIMD2<Int>) {
+            runs.append(Run(start: s, end: e, isXRun: false))
+            zKeys.insert(s); zKeys.insert(e)
+        }
+
+        // Top edge (X-axis runs at gy=0)
         for x in 0..<maze.width where x != maze.entrance.x {
-            keys.insert(SIMD2(x,     0))
-            keys.insert(SIMD2(x + 1, 0))
+            addX(SIMD2(x, 0), SIMD2(x + 1, 0))
         }
-        // Bottom-edge walls: same, except the exit cell.
+        // Bottom edge (X-axis runs at gy=maze.height)
         for x in 0..<maze.width where x != maze.exit.x {
-            keys.insert(SIMD2(x,     maze.height))
-            keys.insert(SIMD2(x + 1, maze.height))
+            addX(SIMD2(x, maze.height), SIMD2(x + 1, maze.height))
         }
-        // Left + right edge walls: per row.
+        // Left + right edges (Z-axis runs)
         for y in 0..<maze.height {
-            keys.insert(SIMD2(0,           y))
-            keys.insert(SIMD2(0,           y + 1))
-            keys.insert(SIMD2(maze.width,  y))
-            keys.insert(SIMD2(maze.width,  y + 1))
+            addZ(SIMD2(0,          y), SIMD2(0,          y + 1))
+            addZ(SIMD2(maze.width, y), SIMD2(maze.width, y + 1))
         }
-        // Interior walls: each east / south slab adds two endpoints.
+        // Interior walls
         for y in 0..<maze.height {
             for x in 0..<maze.width {
                 let here = Coord(x: x, y: y)
-                if x + 1 < maze.width {
-                    let east = Coord(x: x + 1, y: y)
-                    if maze.wall(between: here, east) {
-                        keys.insert(SIMD2(x + 1, y))
-                        keys.insert(SIMD2(x + 1, y + 1))
-                    }
+                if x + 1 < maze.width,
+                   maze.wall(between: here, Coord(x: x + 1, y: y))
+                {
+                    addZ(SIMD2(x + 1, y), SIMD2(x + 1, y + 1))
                 }
-                if y + 1 < maze.height {
-                    let south = Coord(x: x, y: y + 1)
-                    if maze.wall(between: here, south) {
-                        keys.insert(SIMD2(x,     y + 1))
-                        keys.insert(SIMD2(x + 1, y + 1))
-                    }
+                if y + 1 < maze.height,
+                   maze.wall(between: here, Coord(x: x, y: y + 1))
+                {
+                    addX(SIMD2(x, y + 1), SIMD2(x + 1, y + 1))
                 }
             }
         }
-        return keys.map { (Float($0.x) * cellSize, Float($0.y) * cellSize) }
+
+        // True corners = both axes converge at this intersection.
+        let pillars = xKeys.intersection(zKeys)
+
+        // Build slot tuples with per-end shortening based on
+        // whether each end has a pillar.
+        var slots = [(Float, Float, Float, Float)]()
+        let half  = wallThickness / 2
+        for r in runs {
+            let startShort = pillars.contains(r.start) ? half : 0
+            let endShort   = pillars.contains(r.end)   ? half : 0
+            if r.isXRun {
+                let gxA = Float(r.start.x) * cellSize + startShort
+                let gxB = Float(r.end.x)   * cellSize - endShort
+                let cz  = Float(r.start.y) * cellSize
+                slots.append(((gxA + gxB) / 2, cz, gxB - gxA, wallThickness))
+            } else {
+                let gzA = Float(r.start.y) * cellSize + startShort
+                let gzB = Float(r.end.y)   * cellSize - endShort
+                let cx  = Float(r.start.x) * cellSize
+                slots.append((cx, (gzA + gzB) / 2, wallThickness, gzB - gzA))
+            }
+        }
+
+        let corners = pillars.map {
+            (Float($0.x) * cellSize, Float($0.y) * cellSize)
+        }
+        return (slots, corners)
     }
 
     private func wallSlots() -> [(Float, Float, Float, Float)] {
@@ -557,12 +603,7 @@ struct Maze3DView: View {
         let mazeW = Float(maze.width)  * cellSize
         let mazeH = Float(maze.height) * cellSize
 
-        // Each slab is shortened by `wallThickness` along its length
-        // axis (wallT/2 on each end) so it meets the corner pillars
-        // edge-to-edge rather than passing through them. Without
-        // this, slab + pillar surfaces co-occupy the same depth at
-        // every intersection -- z-fighting causes a visible flicker
-        // when you pan or move.
+        // Legacy path -- kept temporarily for reference; not used.
         let slabLen = cellSize - wallThickness
 
         for x in 0..<maze.width where x != maze.entrance.x {
