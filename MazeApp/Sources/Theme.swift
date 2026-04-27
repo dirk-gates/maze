@@ -23,20 +23,21 @@ struct Theme: Sendable {
     var solution   : Color
 
     static func classic(_ scheme: ColorScheme) -> Theme {
-        // Solution = blue, matching the 3D walk-view's cyan trail
-        // so the same color reads as "the path" in both views.
-        // Saturation tuned per scheme so it pops without buzzing.
+        // Walls = hedge green to match the 3D walk view's hedge
+        // texture. Solution = blue, matching the 3D walk view's
+        // cyan trail. Per-scheme saturation keeps things readable
+        // without buzzing.
         switch scheme {
         case .dark:
             return Theme(
                 background : .black,
-                material   : .white,
+                material   : Color(red: 0.30, green: 0.60, blue: 0.25),
                 carved     : .black,
                 solution   : Color(red: 0.30, green: 0.75, blue: 1.00))
         default:
             return Theme(
                 background : .white,
-                material   : .black,
+                material   : Color(red: 0.18, green: 0.45, blue: 0.18),
                 carved     : .white,
                 solution   : Color(red: 0.00, green: 0.45, blue: 0.95))
         }

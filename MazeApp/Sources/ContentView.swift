@@ -29,7 +29,7 @@ struct ContentView: View {
     var body: some View {
         VStack(spacing: 0) {
             GeometryReader { geo in
-                MazeTopDownView(viewModel: viewModel)
+                MazeCanvasView(viewModel: viewModel, theme: theme)
                     .onAppear {
                         if !didInitialLaunch {
                             viewModel.targetUnitPx = targetUnitPixels()
