@@ -115,6 +115,17 @@ final class MazeViewModel {
         generate()
     }
 
+    /// Generate today's "daily maze" -- fixed dims and look-ahead
+    /// across all devices, with a seed derived from the device-
+    /// local calendar date. Same date → same maze, everywhere.
+    func loadDaily(for date: Date = Date()) {
+        width          = DailyMaze.width
+        height         = DailyMaze.height
+        lookAheadDepth = DailyMaze.lookAheadDepth
+        pinnedSeed     = DailyMaze.seed(for: date)
+        generate()
+    }
+
     /// Zoom in (smaller targetUnitPx → cells get smaller, more of them
     /// fit) or out (larger targetUnitPx → bigger cells, fewer of them).
     /// The maze is always refit-and-regenerated so it keeps filling

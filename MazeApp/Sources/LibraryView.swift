@@ -36,31 +36,72 @@ struct LibraryView: View {
 
     @ViewBuilder
     private var content: some View {
-        if viewModel.library.mazes.isEmpty {
-            ContentUnavailableView(
-                "No saved mazes yet",
-                systemImage: "square.grid.3x3.square",
-                description: Text("Generated mazes appear here automatically. Tap one to replay it.")
-            )
-        } else {
-            List {
-                ForEach(viewModel.library.mazes) { saved in
-                    Button {
-                        viewModel.load(saved)
-                        dismiss()
-                    } label: {
-                        row(for: saved)
-                    }
-                    .buttonStyle(.plain)
+        List {
+            Section("Today") {
+                Button {
+                    viewModel.loadDaily()
+                    dismiss()
+                } label: {
+                    dailyRow
                 }
-                .onDelete { offsets in
-                    viewModel.library.remove(at: offsets)
+                .buttonStyle(.plain)
+            }
+            Section("History") {
+                if viewModel.library.mazes.isEmpty {
+                    Text("Generated mazes appear here. Tap one to replay it.")
+                        .font(.callout)
+                        .foregroundStyle(.secondary)
+                } else {
+                    ForEach(viewModel.library.mazes) { saved in
+                        Button {
+                            viewModel.load(saved)
+                            dismiss()
+                        } label: {
+                            row(for: saved)
+                        }
+                        .buttonStyle(.plain)
+                    }
+                    .onDelete { offsets in
+                        viewModel.library.remove(at: offsets)
+                    }
                 }
             }
-            #if os(iOS)
-            .listStyle(.insetGrouped)
-            #endif
         }
+        #if os(iOS)
+        .listStyle(.insetGrouped)
+        #endif
+    }
+
+    /// Featured row at the top of the library: today's deterministic
+    /// "Daily Maze". Same seed/dims for every device on the same
+    /// local-calendar date, so it's a shared puzzle.
+    private var dailyRow: some View {
+        HStack(spacing: 12) {
+            ZStack {
+                RoundedRectangle(cornerRadius: 6)
+                    .fill(Color.accentColor.opacity(0.18))
+                Image(systemName: "calendar")
+                    .font(.title2.weight(.semibold))
+                    .foregroundStyle(Color.accentColor)
+            }
+            .frame(width: 56, height: 56)
+            .overlay(
+                RoundedRectangle(cornerRadius: 6)
+                    .stroke(.separator, lineWidth: 0.5)
+            )
+            VStack(alignment: .leading, spacing: 4) {
+                Text("Today's Daily Maze")
+                    .font(.headline)
+                Text("\(DailyMaze.width) × \(DailyMaze.height) • look-ahead \(DailyMaze.lookAheadDepth) • \(DailyMaze.dateKey())")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+            Spacer()
+            Image(systemName: "play.circle.fill")
+                .font(.title2)
+                .foregroundStyle(Color.accentColor)
+        }
+        .padding(.vertical, 4)
     }
 
     private func row(for saved: SavedMaze) -> some View {
