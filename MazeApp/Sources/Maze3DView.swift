@@ -326,15 +326,22 @@ struct Maze3DView: View {
             ))
         }
 
-        // Corner pillars only at TRUE corners (intersections where
-        // walls along both axes converge). Continuation points get
-        // no pillar -- the slabs touch directly there.
-        let cornerMesh = MeshResource.generateBox(size: SIMD3(
-            wallThickness, wallHeight, wallThickness
-        ))
+        // Corner pillars only at TRUE corners. Use a custom mesh
+        // with UVs scaled to wallT / cellSize (~0.22) on the side
+        // faces so the pillar shows just a *slice* of the hedge
+        // texture at the same density as the surrounding wall
+        // slabs. With the seamless tiling hedge texture, the slice
+        // reads as a continuation of the wall instead of a
+        // squashed full-texture stripe.
+        let pillarUVScale = wallThickness / cellSize
+        let cornerMesh = Self.makePillarMesh(
+            thickness: wallThickness,
+            height   : wallHeight,
+            uvScale  : pillarUVScale
+        )
         for (cx, cz) in corners {
             let pillar = ModelEntity(mesh: cornerMesh, materials: [wallMat])
-            pillar.position = SIMD3(cx, wallHeight / 2, cz)
+            pillar.position = SIMD3(cx, 0, cz)
             wallRoot.addChild(pillar)
             aabbs.append(WallAABB(
                 minX: cx - wallThickness / 2, maxX: cx + wallThickness / 2,
@@ -500,6 +507,84 @@ struct Maze3DView: View {
         )
         pad.position = SIMD3(x, 0.011, z)
         content.add(pad)
+    }
+
+    /// Build a wallT × wallH × wallT pillar with custom UVs that
+    /// show only a `uvScale`-wide slice of the bound texture on
+    /// each side face. Standard MeshResource.generateBox would map
+    /// the full 0..1 texture onto every face -- on the pillar's
+    /// 0.18-wide face that squashes the hedge image into a stretched
+    /// stripe. Mapping UV.u from 0..uvScale matches the texture
+    /// density of the surrounding wall slabs (whose visible faces
+    /// span cellSize and so use uvU = 1.0 over cellSize).
+    ///
+    /// Box origin is at the FOOT (Y=0) and centered in X/Z, so the
+    /// caller positions it by setting `entity.position` to the
+    /// floor-level grid intersection.
+    @MainActor
+    static func makePillarMesh(thickness: Float,
+                               height   : Float,
+                               uvScale  : Float) -> MeshResource
+    {
+        let h: Float = thickness / 2
+        let H: Float = height
+        let u: Float = uvScale       // ~0.22 -- u extent on side faces
+        let v: Float = 1.0           // full v on side faces (vertical)
+
+        // 24 vertices, 4 per face × 6 faces; order: +X, -X, +Y, -Y, +Z, -Z
+        let positions: [SIMD3<Float>] = [
+            // +X
+            SIMD3( h, 0, -h), SIMD3( h, 0,  h), SIMD3( h, H,  h), SIMD3( h, H, -h),
+            // -X
+            SIMD3(-h, 0,  h), SIMD3(-h, 0, -h), SIMD3(-h, H, -h), SIMD3(-h, H,  h),
+            // +Y (top)
+            SIMD3(-h, H, -h), SIMD3( h, H, -h), SIMD3( h, H,  h), SIMD3(-h, H,  h),
+            // -Y (bottom)
+            SIMD3(-h, 0,  h), SIMD3( h, 0,  h), SIMD3( h, 0, -h), SIMD3(-h, 0, -h),
+            // +Z
+            SIMD3( h, 0,  h), SIMD3(-h, 0,  h), SIMD3(-h, H,  h), SIMD3( h, H,  h),
+            // -Z
+            SIMD3(-h, 0, -h), SIMD3( h, 0, -h), SIMD3( h, H, -h), SIMD3(-h, H, -h),
+        ]
+
+        let normals: [SIMD3<Float>] = [
+            SIMD3( 1, 0, 0), SIMD3( 1, 0, 0), SIMD3( 1, 0, 0), SIMD3( 1, 0, 0),
+            SIMD3(-1, 0, 0), SIMD3(-1, 0, 0), SIMD3(-1, 0, 0), SIMD3(-1, 0, 0),
+            SIMD3( 0, 1, 0), SIMD3( 0, 1, 0), SIMD3( 0, 1, 0), SIMD3( 0, 1, 0),
+            SIMD3( 0,-1, 0), SIMD3( 0,-1, 0), SIMD3( 0,-1, 0), SIMD3( 0,-1, 0),
+            SIMD3( 0, 0, 1), SIMD3( 0, 0, 1), SIMD3( 0, 0, 1), SIMD3( 0, 0, 1),
+            SIMD3( 0, 0,-1), SIMD3( 0, 0,-1), SIMD3( 0, 0,-1), SIMD3( 0, 0,-1),
+        ]
+
+        // Side faces use u × v slice; top/bottom show a u × u slice
+        // (small square -- rarely visible at altitude anyway).
+        let uvs: [SIMD2<Float>] = [
+            // +X
+            SIMD2(0, v), SIMD2(u, v), SIMD2(u, 0), SIMD2(0, 0),
+            // -X
+            SIMD2(0, v), SIMD2(u, v), SIMD2(u, 0), SIMD2(0, 0),
+            // +Y top
+            SIMD2(0, 0), SIMD2(u, 0), SIMD2(u, u), SIMD2(0, u),
+            // -Y bottom
+            SIMD2(0, 0), SIMD2(u, 0), SIMD2(u, u), SIMD2(0, u),
+            // +Z
+            SIMD2(0, v), SIMD2(u, v), SIMD2(u, 0), SIMD2(0, 0),
+            // -Z
+            SIMD2(0, v), SIMD2(u, v), SIMD2(u, 0), SIMD2(0, 0),
+        ]
+
+        var indices: [UInt32] = []
+        for face: UInt32 in 0..<6 {
+            let b = face * 4
+            indices.append(contentsOf: [b, b + 1, b + 2, b, b + 2, b + 3])
+        }
+
+        var d = MeshDescriptor(name: "Pillar")
+        d.positions          = MeshBuffers.Positions(positions)
+        d.normals            = MeshBuffers.Normals(normals)
+        d.textureCoordinates = MeshBuffers.TextureCoordinates(uvs)
+        d.primitives         = .triangles(indices)
+        return try! MeshResource.generate(from: [d])
     }
 
     /// Walls + pillars in one pass.
