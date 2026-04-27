@@ -426,21 +426,15 @@ struct Maze3DView: View {
             ))
         }
 
-        // Corner pillars at TRUE corners. Use a SOLID hedge-green
-        // material instead of the textured one -- mapping the full
-        // 0..1 hedge image onto a 0.18-wide face was either
-        // squashing it (visible stretched stripe) or showing a
-        // thin slice at mismatched density vs. the surrounding
-        // wall slabs (visible content discontinuity). A flat green
-        // post at the corner blends well at distance and reads as
-        // "the corner is in shadow" up close -- way less jarring
-        // than either textured approach.
-        let pillarColor = SystemColor(
-            red: 0.18, green: 0.34, blue: 0.14, alpha: 1.0
-        )
-        let pillarMat = SimpleMaterial(
-            color: pillarColor, roughness: 0.95, isMetallic: false
-        )
+        // Corner pillars at TRUE corners. Use a TRIMMED hedge
+        // texture for the pillar material: crop a vertical strip
+        // of the hedge image whose width matches the pillar's
+        // share of the cell (wallT / cellSize) so that, when UV
+        // 0..1 is mapped onto the pillar's wallT-wide face, the
+        // pixel density matches the surrounding wall slabs. No
+        // texture stretching, no content density mismatch, just
+        // a thin slice of real hedge.
+        let pillarMat = pillarMaterial()
         let cornerMesh = MeshResource.generateBox(size: SIMD3(
             wallThickness, wallHeight, wallThickness
         ))
@@ -1067,6 +1061,67 @@ struct Maze3DView: View {
         }
         return SimpleMaterial(color: .init(white: 0.55, alpha: 1.0),
                               roughness: 0.95, isMetallic: false)
+    }
+
+    /// Material for corner pillars. Crops the hedge image to a
+    /// vertical strip wide enough to match the pillar's share of
+    /// a cell -- when standard UV 0..1 is then mapped onto the
+    /// pillar's wallT-wide face, leaf-pixel density on the
+    /// pillar matches the surrounding wall slabs. No squashed
+    /// full-image, no content discontinuity.
+    @MainActor
+    private func pillarMaterial() -> RealityKit.Material {
+        if let tex = pillarTexture() {
+            var m = PhysicallyBasedMaterial()
+            m.baseColor = .init(texture: .init(tex))
+            m.roughness = .init(floatLiteral: 0.95)
+            m.metallic  = .init(floatLiteral: 0.00)
+            return m
+        }
+        // Fallback to a solid hedge tone.
+        let color = SystemColor(red: 0.18, green: 0.34, blue: 0.14, alpha: 1.0)
+        return SimpleMaterial(color: color,
+                              roughness: 0.95, isMetallic: false)
+    }
+
+    @MainActor
+    private func pillarTexture() -> TextureResource? {
+        // Get the source hedge CGImage (from the asset catalog
+        // when present, otherwise the procedural generator's
+        // CGImage path).
+        let cg: CGImage? = {
+            #if os(iOS)
+            if let ui = UIImage(named: "Hedge"), let g = ui.cgImage {
+                return g
+            }
+            #elseif os(macOS)
+            if let ns = NSImage(named: "Hedge"),
+               let g = ns.cgImage(forProposedRect: nil, context: nil, hints: nil) {
+                return g
+            }
+            #endif
+            return nil
+        }()
+        guard let source = cg else { return nil }
+
+        // Crop a centered vertical strip whose horizontal size is
+        // wallT/cellSize fraction of the source. Vertical full
+        // height -- pillar has the same wallH as walls, so the
+        // vertical density already matches.
+        let widthFraction = CGFloat(wallThickness / cellSize)
+        let cropW = max(1, Int(CGFloat(source.width) * widthFraction))
+        let cropH = source.height
+        let cropX = (source.width - cropW) / 2
+        let rect  = CGRect(x: cropX, y: 0, width: cropW, height: cropH)
+        guard let cropped = source.cropping(to: rect) else { return nil }
+
+        return try? TextureResource(
+            image  : cropped,
+            options: TextureResource.CreateOptions(
+                semantic   : .color,
+                mipmapsMode: .allocateAndGenerateAll
+            )
+        )
     }
 
     /// Asset-catalog → CGImage → TextureResource with explicit
