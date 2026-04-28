@@ -291,12 +291,8 @@ private final class PlayerState {
                 p.z = target.y
                 stepTarget = nil
                 // Pull the next path cell off the queue (if any)
-                // so auto-walk continues. Pass the just-landed
-                // XZ explicitly -- `position` (the @Observable
-                // property) won't be written until the bottom of
-                // tick(), so currentCell would still see the
-                // PREVIOUS cell here.
-                advanceQueue(from: SIMD2(p.x, p.z))
+                // so auto-walk continues.
+                advanceQueue()
             } else {
                 let scale = stepDist / dist
                 p.x += dx * scale
@@ -390,44 +386,9 @@ private final class PlayerState {
     }
 
     /// Pull the next cell off `pathQueue` and start the lerp.
-    /// `from` is the player's actual current cell-center position
-    /// (in world XZ); pass it from tick() right after landing on
-    /// the previous step so we don't rely on the stale `position`
-    /// property (which is committed at the bottom of tick()).
-    /// When called from walkTo() with no arg, currentCell is used
-    /// because position is up-to-date there.
-    ///
-    /// Snaps yaw to face (next - here) so auto-walk looks ahead
-    /// in the direction of travel. VR mode rebaselines its gyro
-    /// reference so subsequent motion deltas apply on top of the
-    /// new heading.
-    private func advanceQueue(from: SIMD2<Float>? = nil) {
+    private func advanceQueue() {
         guard !pathQueue.isEmpty else { return }
-
-        let here: Coord
-        if let p = from {
-            here = Coord(
-                x: Int(floor(p.x / cellSize)),
-                y: Int(floor(p.y / cellSize))
-            )
-        } else {
-            here = currentCell
-        }
         let next = pathQueue.removeFirst()
-
-        let dx = next.x - here.x
-        let dz = next.y - here.y
-        if dx != 0 || dz != 0 {
-            // forward = (-sin(yaw), 0, -cos(yaw)) so to face dx,dz:
-            //   yaw = atan2(-dx, -dz)
-            let newYaw = atan2(Float(-dx), Float(-dz))
-            yaw = newYaw
-            if vrEnabled {
-                vrBaseYaw    = newYaw
-                vrRefAttitude = nil
-            }
-        }
-
         let tx = (Float(next.x) + 0.5) * cellSize
         let tz = (Float(next.y) + 0.5) * cellSize
         stepTarget = SIMD2(tx, tz)
