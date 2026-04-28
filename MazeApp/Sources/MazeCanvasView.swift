@@ -167,52 +167,127 @@ struct MazeCanvasView: View {
 
         if let head = viewModel.lastCarve, viewModel.maze == nil {
             let r = cellRect(head)
+            // Direction of motion = lastCarve - prevCarve, in
+            // pixel space. Defaults to facing east when there's
+            // no prev (start of generation).
+            var angle: CGFloat = 0
+            if let prev = viewModel.prevCarve {
+                let dx = CGFloat(head.x - prev.x)
+                let dy = CGFloat(head.y - prev.y)
+                if dx != 0 || dy != 0 {
+                    angle = atan2(dy, dx)
+                }
+            }
             drawLawnmower(
                 context: context,
                 center : CGPoint(x: r.midX, y: r.midY),
-                ws     : ws
+                angle  : angle,
+                cs     : cs
             )
         }
     }
 
-    /// Tiny stylised lawnmower: a brown rounded body with two
-    /// black wheels at the bottom. Sized relative to the wall
-    /// thickness so it fits within a single cell.
+    /// Top-down stylized push mower: red rectangular deck, four
+    /// black wheels at the corners, a brown handle extending back
+    /// to a perpendicular grip, and a small operator head behind
+    /// the grip. The whole icon rotates so the deck points along
+    /// the direction of motion. Sized relative to the cell so it
+    /// stays visible on dense mazes.
     private func drawLawnmower(context: GraphicsContext,
                                center : CGPoint,
-                               ws     : CGFloat)
+                               angle  : CGFloat,
+                               cs     : CGFloat)
     {
-        let s        = max(3.0, ws * 1.4)
-        let bodyRect = CGRect(
-            x     : center.x - s,
-            y     : center.y - s * 0.45,
-            width : s * 2,
-            height: s * 0.9
+        // Scale: clamp to a readable range. Tiny on dense mazes,
+        // generous on roomy ones.
+        let s = min(28.0, max(10.0, cs * 0.35))
+
+        var ctx = context
+        ctx.translateBy(x: center.x, y: center.y)
+        ctx.rotate(by: .radians(angle))
+        // After rotation: +X is the cutting direction (forward),
+        // -X is back (operator side).
+
+        // ---- mower deck ----
+        let deckLen = s * 1.6
+        let deckWid = s * 0.95
+        let deckRect = CGRect(
+            x     : -deckLen / 2,
+            y     : -deckWid / 2,
+            width : deckLen,
+            height: deckWid
         )
-        context.fill(
-            Path(roundedRect: bodyRect, cornerRadius: s * 0.18),
-            with: .color(Color(red: 0.74, green: 0.30, blue: 0.18))
+        let red = Color(red: 0.78, green: 0.20, blue: 0.20)
+        ctx.fill(
+            Path(roundedRect: deckRect, cornerRadius: s * 0.18),
+            with: .color(red)
         )
-        // Wheels just below the body
-        let wr = s * 0.32
-        let wy = bodyRect.maxY - wr * 0.15
-        context.fill(
+        // Subtle dark stroke around the deck so it pops on green.
+        ctx.stroke(
+            Path(roundedRect: deckRect, cornerRadius: s * 0.18),
+            with: .color(.black.opacity(0.55)),
+            lineWidth: s * 0.06
+        )
+
+        // ---- four wheels at the deck corners ----
+        let wr = s * 0.22
+        let wheelDX = deckLen / 2 - wr * 0.6
+        let wheelDY = deckWid / 2 - wr * 0.2
+        for sx in [-1, 1] {
+            for sy in [-1, 1] {
+                let wx = wheelDX * CGFloat(sx)
+                let wy = wheelDY * CGFloat(sy)
+                ctx.fill(
+                    Path(ellipseIn: CGRect(
+                        x     : wx - wr,
+                        y     : wy - wr,
+                        width : wr * 2,
+                        height: wr * 2
+                    )),
+                    with: .color(.black)
+                )
+            }
+        }
+
+        // ---- handle: back-of-deck → grip bar ----
+        let brown = Color(red: 0.32, green: 0.21, blue: 0.12)
+        let lineW = s * 0.20
+        let handleStart = CGPoint(x: -deckLen / 2,         y: 0)
+        let gripCenter  = CGPoint(x: -deckLen / 2 - s * 1.0, y: 0)
+        var handle = Path()
+        handle.move(to: handleStart)
+        handle.addLine(to: gripCenter)
+        ctx.stroke(handle, with: .color(brown),
+                   style: StrokeStyle(lineWidth: lineW, lineCap: .round))
+
+        // Grip: short bar perpendicular to the handle.
+        var grip = Path()
+        grip.move(to: CGPoint(x: gripCenter.x, y: -s * 0.45))
+        grip.addLine(to: CGPoint(x: gripCenter.x, y:  s * 0.45))
+        ctx.stroke(grip, with: .color(brown),
+                   style: StrokeStyle(lineWidth: lineW, lineCap: .round))
+
+        // ---- operator head behind the grip ----
+        let headR = s * 0.30
+        let headX = gripCenter.x - headR * 1.4
+        ctx.fill(
             Path(ellipseIn: CGRect(
-                x     : bodyRect.minX - wr * 0.25,
-                y     : wy - wr,
-                width : wr * 2,
-                height: wr * 2
+                x     : headX - headR,
+                y     : -headR,
+                width : headR * 2,
+                height: headR * 2
             )),
-            with: .color(.black)
+            with: .color(Color(red: 0.93, green: 0.78, blue: 0.62))
         )
-        context.fill(
+        ctx.stroke(
             Path(ellipseIn: CGRect(
-                x     : bodyRect.maxX - wr * 1.75,
-                y     : wy - wr,
-                width : wr * 2,
-                height: wr * 2
+                x     : headX - headR,
+                y     : -headR,
+                width : headR * 2,
+                height: headR * 2
             )),
-            with: .color(.black)
+            with: .color(.black.opacity(0.65)),
+            lineWidth: s * 0.05
         )
     }
 }

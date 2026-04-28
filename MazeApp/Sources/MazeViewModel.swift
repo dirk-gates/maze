@@ -92,6 +92,10 @@ final class MazeViewModel {
     /// lawnmower icon here while generating so the user can see
     /// where the carving "head" currently is.
     var lastCarve: Coord? = nil
+    /// Cell flushed just before `lastCarve`. Renderer uses the
+    /// vector lastCarve - prevCarve to angle the lawnmower so it
+    /// reads as facing the direction of motion.
+    var prevCarve: Coord? = nil
     /// Live particle effects spawned at each carve flush. Pruned
     /// to entries newer than ~1.5 s on every flush.
     var leaves: [LeafParticle] = []
@@ -212,6 +216,7 @@ final class MazeViewModel {
         attemptCount  = 0
         maze          = nil
         lastCarve     = nil
+        prevCarve     = nil
         leaves.removeAll()
         isGenerating  = true
         defer { isGenerating = false }
@@ -243,6 +248,7 @@ final class MazeViewModel {
                 // burst of leaves there so the user sees something
                 // flying out as the path is cut.
                 if let head = pendingCells.last {
+                    self.prevCarve = self.lastCarve
                     self.lastCarve = head
                     self.spawnLeaves(at: head)
                 }
@@ -288,6 +294,7 @@ final class MazeViewModel {
                 entranceGate = nil
                 exitGate     = nil
                 lastCarve = nil
+                prevCarve = nil
                 leaves.removeAll()
                 statsLine = "attempt \(n)…"
             case .carved(let c):
@@ -314,6 +321,7 @@ final class MazeViewModel {
                 flushPending()
                 maze      = m
                 lastCarve = nil
+                prevCarve = nil
                 leaves.removeAll()
                 statsLine = "\(carvedCells.count) cells, "
                           + "solution \(m.solution?.count ?? 0)"
