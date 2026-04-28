@@ -14,6 +14,21 @@ private extension Comparable {
     }
 }
 
+/// One flying leaf particle from the carve animation. Position
+/// at draw-time is `cellOrigin + velocity * age + gravity*age²/2`;
+/// fades out linearly over its lifetime so the renderer can prune
+/// it once it's invisible.
+struct LeafParticle: Identifiable, Sendable {
+    let id        : UUID = UUID()
+    let cellX     : Int
+    let cellY     : Int
+    let velocityX : CGFloat
+    let velocityY : CGFloat
+    let spawnedAt : Date
+    let hue       : Double   // 0..1 -- slight per-leaf variation around hedge green
+    let size      : CGFloat
+}
+
 enum AppearancePreference: String, CaseIterable, Identifiable, Sendable {
     case system, light, dark
     var id: String { rawValue }
@@ -71,6 +86,15 @@ final class MazeViewModel {
     var isGenerating : Bool       = false
     var isSolving    : Bool       = false
     var statsLine    : String     = ""
+
+    // ----- carve animation state -----
+    /// Most recently flushed cell. The 2D Canvas renders a small
+    /// lawnmower icon here while generating so the user can see
+    /// where the carving "head" currently is.
+    var lastCarve: Coord? = nil
+    /// Live particle effects spawned at each carve flush. Pruned
+    /// to entries newer than ~1.5 s on every flush.
+    var leaves: [LeafParticle] = []
 
     // Latest known maze canvas size + target unit pixels, set by
     // ContentView via a GeometryReader. We refit width/height to
@@ -187,6 +211,8 @@ final class MazeViewModel {
         solveProgress = 0
         attemptCount  = 0
         maze          = nil
+        lastCarve     = nil
+        leaves.removeAll()
         isGenerating  = true
         defer { isGenerating = false }
 
@@ -213,6 +239,13 @@ final class MazeViewModel {
             if !pendingCells.isEmpty {
                 for c in pendingCells { carvedCells.insert(c) }
                 statsLine = "\(carvedCells.count) cells carved"
+                // Lawnmower at the most recent flushed cell + a
+                // burst of leaves there so the user sees something
+                // flying out as the path is cut.
+                if let head = pendingCells.last {
+                    self.lastCarve = head
+                    self.spawnLeaves(at: head)
+                }
                 pendingCells.removeAll(keepingCapacity: true)
             }
             for e in pendingOpens  { openWalls.insert(e) }
@@ -254,6 +287,8 @@ final class MazeViewModel {
                 openWalls.removeAll()
                 entranceGate = nil
                 exitGate     = nil
+                lastCarve = nil
+                leaves.removeAll()
                 statsLine = "attempt \(n)…"
             case .carved(let c):
                 pendingCells.append(c)
@@ -278,10 +313,39 @@ final class MazeViewModel {
             case .finished(let m):
                 flushPending()
                 maze      = m
+                lastCarve = nil
+                leaves.removeAll()
                 statsLine = "\(carvedCells.count) cells, "
                           + "solution \(m.solution?.count ?? 0)"
                 appendToLibrary(m, seed: seed)
             }
+        }
+    }
+
+    /// Spawn a small burst of leaf particles at the given cell.
+    /// Each leaf gets a random outward velocity, slight gravity,
+    /// hue and size variation so the bursts feel organic. Old
+    /// leaves are pruned (>1.5 s) on every spawn to keep the array
+    /// bounded.
+    private func spawnLeaves(at cell: Coord) {
+        let now = Date()
+        // Prune old leaves first.
+        let cutoff = now.addingTimeInterval(-1.5)
+        leaves.removeAll { $0.spawnedAt < cutoff }
+
+        let count = Int.random(in: 4...6)
+        for _ in 0..<count {
+            let angle = Double.random(in: 0..<(2 * .pi))
+            let speed = Double.random(in: 35..<85)
+            leaves.append(LeafParticle(
+                cellX     : cell.x,
+                cellY     : cell.y,
+                velocityX : CGFloat(cos(angle) * speed),
+                velocityY : CGFloat(sin(angle) * speed),
+                spawnedAt : now,
+                hue       : Double.random(in: 0.22..<0.40),
+                size      : CGFloat.random(in: 2.5..<5.0)
+            ))
         }
     }
 
