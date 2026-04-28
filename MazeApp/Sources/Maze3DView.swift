@@ -47,14 +47,33 @@ private struct WallAABB {
 private final class PlayerState {
     var position : SIMD3<Float>     // .y already includes altitudeOffset
     var yaw      : Float
-    var pitch    : Float = 0
+    /// Initial value comes from viewModel.walkPitchDeg (converted
+    /// to radians) so users can set the default tilt in Settings.
+    /// Drag-to-look adjusts from there during the session.
+    /// Negative = looking down (qPitch about +X, -Z forward).
+    var pitch    : Float
     var won      : Bool         = false
 
-    /// Target world (X, Z) for the in-progress cell-by-cell step.
-    /// nil = stationary. Replaced by the next step() call -- so
-    /// the player can chain quick taps and the camera will follow
-    /// each new target as it's set.
-    var stepTarget: SIMD2<Float>?
+    /// Polyline path the player is currently traversing -- cell
+    /// centers from BFS for tap-to-walk / auto-walk-home, or
+    /// a 2-point [from, to] for a single D-pad step. Pure-
+    /// pursuit steering in tick() always aims at a point
+    /// `lookahead` ahead on this polyline, so corners curve
+    /// instead of kinking. nil = stationary.
+    private(set) var pathPoints: [SIMD2<Float>]?
+
+    /// World-space point on the path the steering is currently
+    /// aiming at. Updated every tick. Read by the camera-update
+    /// closure to set targetYaw, so the camera turns through the
+    /// same arc the body is steering through.
+    var lookAheadPoint: SIMD2<Float>?
+
+    /// Pure-pursuit lookahead distance, in cells. Larger = more
+    /// aggressive corner cutting (smoother arc, but the
+    /// trajectory bows further from the cell-center line and
+    /// risks clipping walls). 0.5 cell ≈ 0.5 m -- still inside
+    /// the 1 m corridor with margin for `playerRadius`.
+    private let lookahead: Float = 0.5
 
     /// Current camera height ABOVE eye-height. 0 = walking on the
     /// floor; positive = hovering. The camera Y is always
@@ -82,18 +101,25 @@ private final class PlayerState {
     private let exitCellX   : Int
     private let exitCellZ   : Int
     private let playerRadius: Float = 0.22
-    private let stepSpeed   : Float = 3.5   // cells per second during a step lerp
+    /// Cells per second during a step lerp. Initialised from the
+    /// view model's walkSpeed and updated live every frame from
+    /// the walk-view slider, so dragging the slider changes pace
+    /// mid-step without breaking the lerp.
+    var stepSpeed   : Float
     private let altitudeRate: Float = 4.0   // 1/seconds: ~0.25 s to converge
+    /// Per-second smoothing rate for auto-walk yaw lerp. ~3 rad/s
+    /// means a 90° turn lands ~80% in 500 ms -- a deliberate pan
+    /// at corners that lets the eye track the new direction
+    /// before the camera commits to it.
+    private let yawRate     : Float = 3.0
 
-    /// Cells queued by walkTo(_:). Each completed step lerp pulls
-    /// the next cell off the queue and starts a new step. Single
-    /// D-pad taps clear this queue; tap-to-walk replaces it.
-    private var pathQueue: [Coord] = []
-    /// The cell we last popped (or the walkTo start cell, before
-    /// any pops). Used inside advanceQueue() to compute the
-    /// direction of travel for yaw-snap WITHOUT relying on the
-    /// in-tick `position` or `currentCell` snapshot timing.
-    private var lastQueueCell: Coord?
+    /// Target yaw the camera-update closure wants the player to
+    /// face -- updated each frame to point at the active step
+    /// target during auto-walk. tick() lerps `yaw` toward this so
+    /// direction changes pan instead of snap. nil = no override
+    /// (drag-look or VR is in charge).
+    var targetYaw: Float?
+
 
     // ----- VR look (CoreMotion) -----
     /// True while the device-motion stream is driving yaw + pitch.
@@ -109,15 +135,17 @@ private final class PlayerState {
     private var vrBaseYaw  : Float = 0
     private var vrBasePitch: Float = 0
 
-    init(start: SIMD3<Float>, yaw: Float,
+    init(start: SIMD3<Float>, yaw: Float, pitch: Float,
          walls: [WallAABB],
          maze : Maze,
          exitCellX: Int, exitCellZ: Int,
          maxAltitude: Float,
-         wallHeight: Float)
+         wallHeight: Float,
+         stepSpeed : Float)
     {
         self.position     = start
         self.yaw          = yaw
+        self.pitch        = pitch
         self.walls        = walls
         self.width        = maze.width
         self.height       = maze.height
@@ -125,6 +153,7 @@ private final class PlayerState {
         self.exitCellX    = exitCellX
         self.exitCellZ    = exitCellZ
         self.maxAltitude  = maxAltitude
+        self.stepSpeed    = stepSpeed
         // Clamp to a sensible minimum: with waist-high hedges
         // (0.95 m) and eye at 1.55 m, the bare formula goes
         // negative, which makes `isFlying` true at ground level
@@ -209,19 +238,16 @@ private final class PlayerState {
         guard !won else { return }
         guard !isFlying else { return }
 
-        // Cancel any auto-walk path -- this is a manual one-cell
-        // step. Reset the auto-walk's previous-cell tracker too
-        // so the next walkTo starts fresh.
-        pathQueue.removeAll()
-        lastQueueCell = nil
+        // Cancel any in-flight auto-walk -- D-pad always wins.
+        pathPoints = nil
+        lookAheadPoint = nil
 
-        // Snap to the in-flight target if we're mid-lerp -- guarantees
-        // every step starts from a cell center.
-        if let target = stepTarget {
-            position.x = target.x
-            position.z = target.y
-            stepTarget = nil
-        }
+        // Snap to the current cell's center so the new step starts
+        // from a clean grid position.
+        let cellNowX = Int(floor(position.x / cellSize))
+        let cellNowZ = Int(floor(position.z / cellSize))
+        position.x = (Float(cellNowX) + 0.5) * cellSize
+        position.z = (Float(cellNowZ) + 0.5) * cellSize
 
         // Snap yaw to nearest cardinal multiple of π/2.
         let snapped = round(yaw / (.pi / 2)) * (.pi / 2)
@@ -256,11 +282,15 @@ private final class PlayerState {
         let midZ = (Float(cz) + 0.5 + Float(stepZ) * 0.5) * cellSize
         if collides(at: SIMD3(midX, eyeHeight, midZ)) { return }
 
-        // Commit the step -- lerp will pull position toward the
-        // target cell's center each tick.
+        // Commit the step as a 2-point polyline -- straight line,
+        // no corner to round, but uses the same pure-pursuit code
+        // path as auto-walk so behaviour is uniform.
         let targetWX = (Float(targetX) + 0.5) * cellSize
         let targetWZ = (Float(targetZ) + 0.5) * cellSize
-        stepTarget = SIMD2(targetWX, targetWZ)
+        pathPoints = [
+            SIMD2(position.x, position.z),
+            SIMD2(targetWX  , targetWZ)
+        ]
     }
 
     /// Step the altitude target up / down. Caller usually calls
@@ -282,28 +312,53 @@ private final class PlayerState {
         let dy = targetAltitude - altitudeOffset
         altitudeOffset += dy * min(1, dt * altitudeRate)
 
+        // Smooth yaw lerp toward the target the camera-update closure
+        // sets each frame during auto-walk. Shortest-arc delta via
+        // atan2(sin Δ, cos Δ) so a π → -π wrap turns the short way.
+        // VR mode owns yaw via the gyro -- skip the lerp entirely.
+        if !vrEnabled, let target = targetYaw {
+            let delta = atan2(sin(target - yaw), cos(target - yaw))
+            if abs(delta) < 0.001 {
+                yaw       = target
+                targetYaw = nil
+            } else {
+                yaw += delta * min(1, dt * yawRate)
+            }
+        }
+
         var p = position
 
-        // Step-target lerp: pull (x, z) toward the most recent
-        // step destination, if any. Each lerp lands on a cell
-        // center. When it finishes, advance the auto-walk queue
-        // so chained tap-to-walk steps flow into each other.
-        if !isFlying, let target = stepTarget {
-            let dx = target.x - p.x
-            let dz = target.y - p.z
-            let dist = sqrt(dx * dx + dz * dz)
+        // Pure-pursuit steering along the current polyline path:
+        // each tick, project position onto the path to get our
+        // arc-length on it, look `lookahead` further along, and
+        // step `stepDist` toward that point. Sharp 90° corners
+        // become smooth arcs because the aim point is already
+        // past the corner before the body reaches it. The cyan
+        // solution path overlay still goes through cell centers,
+        // so the player visibly cuts inside it on turns -- by
+        // design.
+        if !isFlying, let waypoints = pathPoints {
+            let pos2D    = SIMD2<Float>(p.x, p.z)
+            let totalLen = polylineLength(waypoints)
+            let (currentArc, _) = projectOntoPolyline(pos2D, waypoints)
             let stepDist = stepSpeed * cellSize * dt
-            if dist <= stepDist || dist < 0.001 {
-                p.x = target.x
-                p.z = target.y
-                stepTarget = nil
-                // Pull the next path cell off the queue (if any)
-                // so auto-walk continues.
-                advanceQueue()
+
+            if currentArc + stepDist >= totalLen {
+                // Final approach -- snap to the last waypoint.
+                p.x            = waypoints.last!.x
+                p.z            = waypoints.last!.y
+                pathPoints     = nil
+                lookAheadPoint = nil
             } else {
-                let scale = stepDist / dist
-                p.x += dx * scale
-                p.z += dz * scale
+                let aimArc = min(currentArc + lookahead * cellSize, totalLen)
+                let aim    = pointAtArcLength(aimArc, waypoints)
+                let dir    = aim - pos2D
+                let dirLen = sqrt(dir.x * dir.x + dir.y * dir.y)
+                if dirLen > 0.0001 {
+                    p.x += (dir.x / dirLen) * stepDist
+                    p.z += (dir.y / dirLen) * stepDist
+                }
+                lookAheadPoint = aim
             }
         }
         p.y = eyeHeight + altitudeOffset
@@ -318,7 +373,8 @@ private final class PlayerState {
                 let cz = (floor(p.z / cellSize) + 0.5) * cellSize
                 p.x = cx
                 p.z = cz
-                stepTarget = nil
+                pathPoints     = nil
+                lookAheadPoint = nil
             }
         }
         position = p
@@ -333,14 +389,21 @@ private final class PlayerState {
         }
     }
 
-    /// Cell the player is currently in (or about to land in if
-    /// a step lerp is in flight). Used by walkTo and the live
-    /// solution-path overlay.
+    /// Cell the player is currently in (or about to be in, if
+    /// auto-walk is in flight). Used by walkTo and the live
+    /// solution-path overlay. While moving, look ahead 0.3 cells
+    /// on the path so a re-Solve doesn't BFS from the cell we
+    /// already passed through.
     var currentCell: Coord {
-        if let target = stepTarget {
+        if let waypoints = pathPoints {
+            let pos2D = SIMD2<Float>(position.x, position.z)
+            let (arc, _) = projectOntoPolyline(pos2D, waypoints)
+            let total    = polylineLength(waypoints)
+            let pt       = pointAtArcLength(min(arc + 0.3 * cellSize, total),
+                                            waypoints)
             return Coord(
-                x: Int(floor(target.x / cellSize)),
-                y: Int(floor(target.y / cellSize))
+                x: Int(floor(pt.x / cellSize)),
+                y: Int(floor(pt.y / cellSize))
             )
         }
         return Coord(
@@ -366,64 +429,95 @@ private final class PlayerState {
         guard !won else { return }
         guard !isFlying else { return }
 
-        // Snap to the in-flight target so we BFS from a clean
-        // cell center.
-        if let stp = stepTarget {
-            position.x = stp.x
-            position.z = stp.y
-            stepTarget = nil
-        }
-
         let cx = Int(floor(position.x / cellSize))
         let cz = Int(floor(position.z / cellSize))
         let here = Coord(x: cx, y: cz)
         guard target != here else {
-            pathQueue.removeAll()
+            pathPoints     = nil
+            lookAheadPoint = nil
             return
         }
         guard target.x >= 0, target.x < width,
               target.y >= 0, target.y < height
         else { return }
 
-        let path = bfs(from: here, to: target)
-        // BFS returns the full list including the start; we want
-        // only the steps from "next cell" onward.
-        pathQueue = Array(path.dropFirst())
-        // Seed lastQueueCell with the start cell so advanceQueue
-        // can compute the direction of the FIRST step as
-        // (next - here). Subsequent advances update it themselves.
-        lastQueueCell = here
-        advanceQueue()
+        let bfsPath = bfs(from: here, to: target)
+        guard bfsPath.count >= 2 else { return }
+        // Convert cell list to a polyline of cell centers; the
+        // pure-pursuit loop in tick() rounds corners as it goes.
+        pathPoints = bfsPath.map {
+            SIMD2<Float>(
+                (Float($0.x) + 0.5) * cellSize,
+                (Float($0.y) + 0.5) * cellSize)
+        }
     }
 
-    /// Pull the next cell off `pathQueue`, snap yaw to face the
-    /// direction of travel (next − lastQueueCell), then start the
-    /// lerp. lastQueueCell is initialized by walkTo() with the
-    /// player's starting cell, then updated on every pop -- so we
-    /// never have to ask "where is the player right now?" mid-tick.
-    private func advanceQueue() {
-        guard !pathQueue.isEmpty else { return }
-        let next = pathQueue.removeFirst()
+    // ------------------------------------------------------------------
+    // Polyline helpers (used by tick() pure-pursuit + currentCell)
+    // ------------------------------------------------------------------
 
-        if let prev = lastQueueCell {
-            let dx = next.x - prev.x
-            let dz = next.y - prev.y
-            if dx != 0 || dz != 0 {
-                // forward = (-sin(yaw), 0, -cos(yaw)) so to face
-                // (dx, 0, dz): yaw = atan2(-dx, -dz).
-                let newYaw = atan2(Float(-dx), Float(-dz))
-                yaw = newYaw
-                if vrEnabled {
-                    vrBaseYaw     = newYaw
-                    vrRefAttitude = nil
-                }
-            }
+    private func polylineLength(_ pts: [SIMD2<Float>]) -> Float {
+        var total: Float = 0
+        for i in 1..<pts.count {
+            let d = pts[i] - pts[i - 1]
+            total += sqrt(d.x * d.x + d.y * d.y)
         }
-        lastQueueCell = next
+        return total
+    }
 
-        let tx = (Float(next.x) + 0.5) * cellSize
-        let tz = (Float(next.y) + 0.5) * cellSize
-        stepTarget = SIMD2(tx, tz)
+    /// Closest point on the polyline to `p`, expressed as the
+    /// arc length from the polyline's start. O(N) over segments;
+    /// fine for the BFS-sized paths we feed it (≤ width × height).
+    private func projectOntoPolyline(
+        _ p   : SIMD2<Float>,
+        _ pts : [SIMD2<Float>]
+    ) -> (arcLength: Float, projected: SIMD2<Float>) {
+        var bestDistSq: Float = .infinity
+        var bestArc   : Float = 0
+        var bestPoint = pts.first ?? p
+        var arcSoFar  : Float = 0
+        for i in 1..<pts.count {
+            let a     = pts[i - 1]
+            let b     = pts[i]
+            let ab    = b - a
+            let abLen = sqrt(ab.x * ab.x + ab.y * ab.y)
+            if abLen < 0.0001 { continue }
+            let abN  = ab / abLen
+            let ap   = p - a
+            let proj = max(0, min(abLen, ap.x * abN.x + ap.y * abN.y))
+            let q    = a + abN * proj
+            let d    = p - q
+            let dSq  = d.x * d.x + d.y * d.y
+            if dSq < bestDistSq {
+                bestDistSq = dSq
+                bestArc    = arcSoFar + proj
+                bestPoint  = q
+            }
+            arcSoFar += abLen
+        }
+        return (bestArc, bestPoint)
+    }
+
+    /// Sample the polyline at a given arc length from its start.
+    /// Clamps to the endpoints if the arc length is out of range.
+    private func pointAtArcLength(
+        _ target : Float,
+        _ pts    : [SIMD2<Float>]
+    ) -> SIMD2<Float> {
+        if target <= 0 { return pts.first ?? SIMD2(0, 0) }
+        var arc: Float = 0
+        for i in 1..<pts.count {
+            let a     = pts[i - 1]
+            let b     = pts[i]
+            let ab    = b - a
+            let abLen = sqrt(ab.x * ab.x + ab.y * ab.y)
+            if target <= arc + abLen {
+                let t = abLen > 0.0001 ? (target - arc) / abLen : 0
+                return a + ab * t
+            }
+            arc += abLen
+        }
+        return pts.last ?? SIMD2(0, 0)
     }
 
     /// Standard BFS through the maze graph. Edges = cell pairs
@@ -574,6 +668,10 @@ struct Maze3DView: View {
     /// switch between tall (can't see over) and waist-high (can
     /// see across the maze) in Settings.
     let wallHeight: Float
+    /// Owns walkSpeed (live-bound to the in-walk slider) and
+    /// any future runtime walk-mode prefs. Kept as @Bindable so
+    /// the slider can $-bind without re-routing through @State.
+    @Bindable var viewModel: MazeViewModel
     @Environment(\.dismiss) private var dismiss
     @Environment(\.colorScheme) private var scheme
 
@@ -803,12 +901,14 @@ struct Maze3DView: View {
         let p = PlayerState(
             start      : SIMD3(startX, eyeHeight, startZ),
             yaw        : startYaw,
+            pitch      : viewModel.walkPitchDeg * .pi / 180,
             walls      : aabbs,
             maze       : maze,
             exitCellX  : maze.exit.x,
             exitCellZ  : maze.height - 1,
             maxAltitude: maxAlt,
-            wallHeight : wallHeight
+            wallHeight : wallHeight,
+            stepSpeed  : viewModel.walkSpeed
         )
         player = p
 
@@ -899,8 +999,28 @@ struct Maze3DView: View {
             Task { @MainActor in
                 guard let player = self.player else { return }
                 guard !self.enteringScene else { return }
+                // Live walk-speed slider in the overlay writes
+                // through every frame -- dragging it changes the
+                // in-flight lerp speed without snapping position.
+                player.stepSpeed = self.viewModel.walkSpeed
                 player.tick(dt: Float(event.deltaTime))
                 self.cameraEntity.position = player.position
+
+                // Look-ahead during auto-walk: aim the camera at
+                // the SAME pure-pursuit target the body is steering
+                // toward. tick() lerps yaw toward it, so the camera
+                // arcs through corners instead of snapping. VR mode
+                // owns yaw via the gyro -- skip.
+                if let target = player.lookAheadPoint, !player.vrEnabled {
+                    let dx = target.x - player.position.x
+                    let dz = target.y - player.position.z
+                    if abs(dx) > 0.01 || abs(dz) > 0.01 {
+                        // Yaw convention: forward = (-sin(yaw), 0, -cos(yaw)),
+                        // so face (dx, 0, dz) at yaw = atan2(-dx, -dz).
+                        player.targetYaw = atan2(-dx, -dz)
+                    }
+                }
+
                 let qYaw   = simd_quatf(angle: player.yaw,   axis: [0, 1, 0])
                 let qPitch = simd_quatf(angle: player.pitch, axis: [1, 0, 0])
                 self.cameraEntity.orientation = qYaw * qPitch
@@ -1484,8 +1604,54 @@ struct Maze3DView: View {
                 .padding(.bottom , 28)
 
                 Spacer()
+
+                walkSpeedSlider
+                    .padding(.trailing, 24)
+                    .padding(.bottom  , 36)
             }
         }
+    }
+
+    /// Live walk-speed slider in the bottom-right of the walk
+    /// overlay. Binds straight into viewModel.walkSpeed; the
+    /// per-frame SceneEvents.Update closure copies that value
+    /// onto `player.stepSpeed`, so dragging changes pace
+    /// instantly without restarting the in-flight step lerp.
+    /// The tortoise / hare are real Buttons so taps land on the
+    /// nudge handler instead of falling through to lookSurface
+    /// (which would treat the tap as a "walk to that cell" hit).
+    private var walkSpeedSlider: some View {
+        HStack(spacing: 8) {
+            Button { nudgeWalkSpeed(by: -walkSpeedStep) } label: {
+                Image(systemName: "tortoise.fill")
+                    .foregroundStyle(.white.opacity(0.8))
+            }
+            .buttonStyle(.borderless)
+            .accessibilityLabel("Slower")
+
+            Slider(value: $viewModel.walkSpeed, in: 1.5...8.0)
+                .frame(width: 160)
+                .tint(.white.opacity(0.9))
+
+            Button { nudgeWalkSpeed(by:  walkSpeedStep) } label: {
+                Image(systemName: "hare.fill")
+                    .foregroundStyle(.white.opacity(0.8))
+            }
+            .buttonStyle(.borderless)
+            .accessibilityLabel("Faster")
+        }
+        .padding(.horizontal, 14)
+        .padding(.vertical  , 8)
+        .background(Capsule().fill(.black.opacity(0.45)))
+    }
+
+    /// 0.5 cells/s per tap -> 13 taps to traverse the 1.5-8.0
+    /// range. Same shape as ControlsView.speedStep on the
+    /// generate page, scaled to this slider's units.
+    private let walkSpeedStep: Float = 0.5
+
+    private func nudgeWalkSpeed(by delta: Float) {
+        viewModel.walkSpeed = min(8.0, max(1.5, viewModel.walkSpeed + delta))
     }
     #endif
 

@@ -66,6 +66,18 @@ struct SettingsView: View {
                     Text("\"Waist high\" drops the hedges below eye level so you can see across the maze as you walk it. Takes effect on the next time you tap Walk.")
                         .font(.footnote)
                 }
+                Section {
+                    LabeledContent("Camera tilt",
+                                   value: "\(Int(viewModel.walkPitchDeg))°")
+                    Slider(value: $viewModel.walkPitchDeg,
+                           in   : -60...0,
+                           step : 5)
+                } header: {
+                    Text("Walk-mode tilt")
+                } footer: {
+                    Text("How far the camera tilts down by default when entering walk mode, so the floor and the cyan solution path are visible from the start. Drag-to-look overrides this during the walk.")
+                        .font(.footnote)
+                }
                 Section("Size") {
                     Stepper(value: $width, in: 4...80) {
                         LabeledContent("Width", value: "\(width) cells")

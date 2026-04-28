@@ -73,6 +73,15 @@ final class MazeViewModel {
     var animationSpeed: Double  = 0.65   // 0 = slow, 1 = instant
     var appearance    : AppearancePreference = .system
     var hedgeHeight   : HedgeHeight          = .waist
+    /// Cells per second the 3D camera traverses during tap-to-walk
+    /// and double-tap-Solve auto-walk. User-tunable via Settings;
+    /// applies on the next walk session.
+    var walkSpeed     : Float                = 3.5
+    /// Default downward tilt of the walk-mode camera, in degrees
+    /// (negative = looking down). Set at PlayerState init only;
+    /// drag-to-look in walk mode adjusts from there without
+    /// being snapped back to this default each frame.
+    var walkPitchDeg  : Float                = -35
 
     /// Seed actually used by the most recent / current generation.
     /// Captured so we can persist it to the library and replay later.
