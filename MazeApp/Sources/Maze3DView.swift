@@ -536,24 +536,35 @@ struct Maze3DView: View {
         player = p
 
         // ---- cinematic entry ----
-        // Place the camera HIGH above the maze, looking down at the
-        // entrance, then sweep it down to the player's eye-level
-        // starting transform over a few seconds. Look / step input
-        // is gated behind `enteringScene` until the move finishes.
-        let entryDuration: TimeInterval = 3.0
+        // Phase 1: open with a STRAIGHT-DOWN view above the maze
+        //          center -- matches the 2D first page (maze
+        //          centered, no rotation).
+        // Phase 2: smoothly translate to the player's eye-level
+        //          starting position over a few seconds. The
+        //          camera stays looking straight down throughout
+        //          -- no twisting or turning during the descent.
+        // Phase 3: brief pitch-up so we hand off control with the
+        //          camera facing down an open corridor.
 
-        let openingPos = SIMD3<Float>(
-            mazeW / 2,
-            span * 1.05,
-            mazeH * 0.85 + span * 0.3
+        let lookDown = simd_quatf(angle: -.pi / 2, axis: SIMD3<Float>(1, 0, 0))
+
+        // Open at altitude high enough to fit the maze in both
+        // axes on a portrait device. mazeH*0.6 fits a tall maze
+        // vertically at FOV=90°; mazeW*1.2 keeps a square / wider
+        // maze from getting clipped horizontally.
+        let openingY  = max(mazeH * 0.6, mazeW * 1.2)
+        let openingPos = SIMD3<Float>(mazeW / 2, openingY, mazeH / 2)
+        cameraEntity.transform = Transform(
+            scale      : .one,
+            rotation   : lookDown,
+            translation: openingPos
         )
-        let opener = Entity()
-        opener.position = openingPos
-        opener.look(at: SIMD3(startX, 0, startZ),
-                    from: openingPos,
-                    relativeTo: nil)
-        cameraEntity.transform = opener.transform
 
+        let descendTransform = Transform(
+            scale      : .one,
+            rotation   : lookDown,           // STILL looking straight down
+            translation: p.position
+        )
         let endRotation = simd_quatf(angle: p.yaw,   axis: [0, 1, 0])
                         * simd_quatf(angle: p.pitch, axis: [1, 0, 0])
         let endTransform = Transform(
@@ -561,15 +572,28 @@ struct Maze3DView: View {
             rotation   : endRotation,
             translation: p.position
         )
+
+        let descendDuration: TimeInterval = 3.0
+        let pitchDuration  : TimeInterval = 0.6
+
         cameraEntity.move(
-            to            : endTransform,
+            to            : descendTransform,
             relativeTo    : nil,
-            duration      : entryDuration,
+            duration      : descendDuration,
             timingFunction: .easeInOut
         )
         Task { @MainActor in
             try? await Task.sleep(
-                nanoseconds: UInt64(entryDuration * 1_000_000_000)
+                nanoseconds: UInt64(descendDuration * 1_000_000_000)
+            )
+            self.cameraEntity.move(
+                to            : endTransform,
+                relativeTo    : nil,
+                duration      : pitchDuration,
+                timingFunction: .easeInOut
+            )
+            try? await Task.sleep(
+                nanoseconds: UInt64(pitchDuration * 1_000_000_000)
             )
             self.enteringScene = false
         }
