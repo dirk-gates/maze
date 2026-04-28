@@ -12,6 +12,7 @@
 //   `cellSize` world units; walls `wallThickness` thick by
 //   `wallHeight` tall. Floor at y=0; player eye at `eyeHeight`.
 
+import CoreMotion
 import MazeKit
 import RealityKit
 import SwiftUI
@@ -89,6 +90,20 @@ private final class PlayerState {
     /// D-pad taps clear this queue; tap-to-walk replaces it.
     private var pathQueue: [Coord] = []
 
+    // ----- VR look (CoreMotion) -----
+    /// True while the device-motion stream is driving yaw + pitch.
+    /// Drag-to-look becomes a no-op while this is on.
+    var vrEnabled: Bool = false
+    /// Captured device attitude at the moment VR mode is turned
+    /// on. Subsequent samples are expressed relative to this so
+    /// the view stays put when the phone is held still and
+    /// rotates only when the phone rotates.
+    private var vrRefAttitude: CMAttitude?
+    /// Player yaw / pitch at the moment VR mode is turned on --
+    /// motion deltas are added on top, not replacing.
+    private var vrBaseYaw  : Float = 0
+    private var vrBasePitch: Float = 0
+
     init(start: SIMD3<Float>, yaw: Float,
          walls: [WallAABB],
          maze : Maze,
@@ -115,10 +130,62 @@ private final class PlayerState {
     }
 
     func applyLookDelta(_ delta: CGSize) {
+        // VR mode owns yaw/pitch -- swallow drag input so the
+        // gyro doesn't fight it.
+        guard !vrEnabled else { return }
         let sens: Float = 0.005
         yaw   -= Float(delta.width)  * sens
         pitch -= Float(delta.height) * sens
         pitch = max(-1.4, min(1.4, pitch))
+    }
+
+    /// Switch on VR look. Captures the player's current yaw +
+    /// pitch as the baseline and clears the reference attitude
+    /// (the next motion sample becomes the zero-orientation).
+    func startVR() {
+        vrEnabled    = true
+        vrBaseYaw    = yaw
+        vrBasePitch  = pitch
+        vrRefAttitude = nil
+    }
+
+    func stopVR() {
+        vrEnabled    = false
+        vrRefAttitude = nil
+    }
+
+    /// Apply one CoreMotion sample to the player's view. The
+    /// device attitude is multiplied by the inverse of the
+    /// reference attitude so we get rotation relative to "the
+    /// pose the phone was in when VR was enabled". Yaw goes to
+    /// camera yaw; pitch goes to camera pitch (clamped).
+    func applyMotion(_ motion: CMDeviceMotion) {
+        guard vrEnabled else { return }
+        let attitude = motion.attitude.copy() as! CMAttitude
+        if vrRefAttitude == nil {
+            vrRefAttitude = attitude
+            return
+        }
+        if let ref = vrRefAttitude {
+            attitude.multiply(byInverseOf: ref)
+        }
+        // CoreMotion uses East-up-North-ish frames depending on
+        // settings; for a portrait-held phone the yaw axis is
+        // vertical (rotating phone left/right around its long
+        // axis... wait no, that's roll). For portrait the most
+        // natural mapping is:
+        //   user turns body left  → phone yaws CCW (negative)
+        //                         → camera should yaw CCW (negative)
+        //   user tips phone down  → phone pitches negative
+        //                         → camera pitch negative (look down)
+        // The rotation around the camera's local X (camera pitch)
+        // matches the device's "roll" when phone is portrait,
+        // since the device's pitch axis runs across the screen
+        // horizontally. Swap pitch ← attitude.roll.
+        let dyaw   = Float(attitude.yaw)
+        let dpitch = Float(attitude.roll)
+        yaw   = vrBaseYaw   + dyaw
+        pitch = max(-1.4, min(1.4, vrBasePitch + dpitch))
     }
 
     /// Step exactly one cell relative to the player's facing.
@@ -505,6 +572,10 @@ struct Maze3DView: View {
     /// drag-to-look. Cleared in onEnded.
     @State private var dragMoved: Bool = false
 
+    /// CoreMotion manager that drives VR-mode look. Created lazily
+    /// inside the View; the start/stop calls live in toggleVR.
+    @State private var motionManager: CMMotionManager = CMMotionManager()
+
     private func applyLook(translation: CGSize) {
         let delta = CGSize(
             width : translation.width  - lookAnchor.width,
@@ -539,15 +610,17 @@ struct Maze3DView: View {
             controlsOverlay
             #endif
 
-            // Top bar: close on the left, altitude steppers + Solve
-            // on the right. Down on the inside, up on the outside,
-            // so the pair reads as "the up arrow lifts you higher".
+            // Top bar: close on the left, altitude steppers + VR +
+            // Solve on the right. Down on the inside, up on the
+            // outside, so the pair reads as "the up arrow lifts
+            // you higher".
             VStack {
                 HStack(spacing: 0) {
                     closeButton
                     Spacer()
                     flyDownButton
                     flyUpButton
+                    vrToggle
                     solveToggle
                 }
                 Spacer()
@@ -557,6 +630,13 @@ struct Maze3DView: View {
             if let player, player.won {
                 winOverlay
             }
+        }
+        .onDisappear {
+            // Cut off the motion stream when leaving walk mode --
+            // the manager keeps running otherwise, draining
+            // battery for nothing.
+            motionManager.stopDeviceMotionUpdates()
+            player?.stopVR()
         }
     }
 
@@ -1176,6 +1256,51 @@ struct Maze3DView: View {
     /// World units per altitude tap. Tuned so 1 tap = ~1.25× hedge
     /// (puts you just clear of the hedges from the ground).
     private let flyStep: Float = 2.5
+
+    /// VR-look toggle. While on, device motion (azimuth + tilt)
+    /// drives the camera yaw + pitch. Drag-to-look is suppressed.
+    /// Tap-to-walk and the D-pad continue to work -- only the
+    /// view rotation is gyro-driven.
+    private var vrToggle: some View {
+        Button {
+            toggleVR()
+        } label: {
+            Image(systemName: "arkit")
+                .font(.largeTitle)
+                .padding(10)
+                .background(Circle().fill(.black.opacity(0.55)))
+                .foregroundStyle(
+                    (player?.vrEnabled ?? false) ? .yellow : .white
+                )
+                .padding()
+        }
+        .accessibilityLabel(
+            (player?.vrEnabled ?? false) ? "Disable VR look" : "Enable VR look"
+        )
+    }
+
+    private func toggleVR() {
+        guard let player else { return }
+        if player.vrEnabled {
+            player.stopVR()
+            motionManager.stopDeviceMotionUpdates()
+        } else {
+            guard motionManager.isDeviceMotionAvailable else { return }
+            player.startVR()
+            motionManager.deviceMotionUpdateInterval = 1.0 / 60.0
+            // Capture the player class reference so the closure
+            // doesn't depend on the View's @State accessor (which
+            // freezes at closure-creation time but the class ref
+            // stays stable across re-renders).
+            let p = player
+            motionManager.startDeviceMotionUpdates(to: .main) { motion, _ in
+                guard let m = motion else { return }
+                Task { @MainActor in
+                    p.applyMotion(m)
+                }
+            }
+        }
+    }
 
     /// Top-right toggle that shows / hides the solution-path
     /// overlay. On every switch-on the path is rebuilt from the
