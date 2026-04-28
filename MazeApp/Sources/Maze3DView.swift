@@ -19,9 +19,13 @@ import SwiftUI
 // MARK: - World constants
 
 private let cellSize     : Float = 1.0
-private let wallHeight   : Float = 2.0
 private let wallThickness: Float = 0.18
 private let eyeHeight    : Float = 1.55
+// `wallHeight` is no longer a file-level constant -- it comes
+// from viewModel.hedgeHeight.meters so users can drop the hedges
+// to waist height to see across the maze. Values that need it
+// outside Maze3DView's struct (PlayerState's flyClearance) get
+// it via init parameter.
 
 // MARK: - Collision
 
@@ -65,7 +69,10 @@ private final class PlayerState {
     var isFlying: Bool { altitudeOffset > flyClearance }
 
     let maxAltitude  : Float
-    private let flyClearance: Float = wallHeight - eyeHeight + 0.1
+    /// "We're above the hedges" threshold. Set from the wall
+    /// height in this session (waist vs tall) so flying-over
+    /// kicks in at the right altitude for the chosen hedge size.
+    private let flyClearance: Float
 
     private let walls       : [WallAABB]
     private let width       : Int
@@ -80,16 +87,18 @@ private final class PlayerState {
          walls: [WallAABB],
          width: Int, height: Int,
          exitCellX: Int, exitCellZ: Int,
-         maxAltitude: Float)
+         maxAltitude: Float,
+         wallHeight: Float)
     {
-        self.position    = start
-        self.yaw         = yaw
-        self.walls       = walls
-        self.width       = width
-        self.height      = height
-        self.exitCellX   = exitCellX
-        self.exitCellZ   = exitCellZ
-        self.maxAltitude = maxAltitude
+        self.position     = start
+        self.yaw          = yaw
+        self.walls        = walls
+        self.width        = width
+        self.height       = height
+        self.exitCellX    = exitCellX
+        self.exitCellZ    = exitCellZ
+        self.maxAltitude  = maxAltitude
+        self.flyClearance = wallHeight - eyeHeight + 0.1
     }
 
     func applyLookDelta(_ delta: CGSize) {
@@ -316,6 +325,11 @@ private struct VirtualJoystick: View {
 
 struct Maze3DView: View {
     let maze: Maze
+    /// World-space hedge height for this walk session, in metres.
+    /// Comes from viewModel.hedgeHeight.meters so the user can
+    /// switch between tall (can't see over) and waist-high (can
+    /// see across the maze) in Settings.
+    let wallHeight: Float
     @Environment(\.dismiss) private var dismiss
     @Environment(\.colorScheme) private var scheme
 
@@ -531,7 +545,8 @@ struct Maze3DView: View {
             height     : maze.height,
             exitCellX  : maze.exit.x,
             exitCellZ  : maze.height - 1,
-            maxAltitude: maxAlt
+            maxAltitude: maxAlt,
+            wallHeight : wallHeight
         )
         player = p
 

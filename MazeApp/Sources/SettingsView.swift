@@ -53,6 +53,19 @@ struct SettingsView: View {
                     }
                     .pickerStyle(.segmented)
                 }
+                Section {
+                    Picker("Hedge height", selection: $viewModel.hedgeHeight) {
+                        ForEach(HedgeHeight.allCases) { h in
+                            Text(h.displayName).tag(h)
+                        }
+                    }
+                    .pickerStyle(.segmented)
+                } header: {
+                    Text("Walk-mode hedges")
+                } footer: {
+                    Text("\"Waist high\" drops the hedges below eye level so you can see across the maze as you walk it. Takes effect on the next time you tap Walk.")
+                        .font(.footnote)
+                }
                 Section("Size") {
                     Stepper(value: $width, in: 4...80) {
                         LabeledContent("Width", value: "\(width) cells")

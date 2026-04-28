@@ -41,6 +41,28 @@ enum AppearancePreference: String, CaseIterable, Identifiable, Sendable {
     }
 }
 
+/// Wall height when walking the maze in 3D. Tall hedges block
+/// your view (current default). Waist-high hedges drop below eye
+/// level so you can see across the maze as you traverse it.
+enum HedgeHeight: String, CaseIterable, Identifiable, Sendable {
+    case tall, waist
+    var id: String { rawValue }
+    var displayName: String {
+        switch self {
+        case .tall : return "Taller than you"
+        case .waist: return "Waist high"
+        }
+    }
+    /// World-space wall height in metres. Eye height is 1.55 m
+    /// (~5 ft); tall is well above that, waist is well below.
+    var meters: Float {
+        switch self {
+        case .tall : return 2.2
+        case .waist: return 0.95
+        }
+    }
+}
+
 @MainActor
 @Observable
 final class MazeViewModel {
@@ -50,6 +72,7 @@ final class MazeViewModel {
     var lookAheadDepth: Int     = 0
     var animationSpeed: Double  = 0.65   // 0 = slow, 1 = instant
     var appearance    : AppearancePreference = .system
+    var hedgeHeight   : HedgeHeight          = .tall
 
     /// Seed actually used by the most recent / current generation.
     /// Captured so we can persist it to the library and replay later.

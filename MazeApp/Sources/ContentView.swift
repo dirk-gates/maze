@@ -75,13 +75,15 @@ struct ContentView: View {
         #if os(iOS)
         .fullScreenCover(isPresented: $showing3D) {
             if let maze = viewModel.maze {
-                Maze3DView(maze: maze)
+                Maze3DView(maze: maze,
+                           wallHeight: viewModel.hedgeHeight.meters)
             }
         }
         #else
         .sheet(isPresented: $showing3D) {
             if let maze = viewModel.maze {
-                Maze3DView(maze: maze)
+                Maze3DView(maze: maze,
+                           wallHeight: viewModel.hedgeHeight.meters)
                     .frame(minWidth: 720, minHeight: 540)
             }
         }
