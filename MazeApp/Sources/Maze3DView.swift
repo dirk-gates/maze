@@ -260,6 +260,30 @@ private final class PlayerState {
         }
     }
 
+    /// Cell the player is currently in (or about to land in if
+    /// a step lerp is in flight). Used by walkTo and the live
+    /// solution-path overlay.
+    var currentCell: Coord {
+        if let target = stepTarget {
+            return Coord(
+                x: Int(floor(target.x / cellSize)),
+                y: Int(floor(target.y / cellSize))
+            )
+        }
+        return Coord(
+            x: Int(floor(position.x / cellSize)),
+            y: Int(floor(position.z / cellSize))
+        )
+    }
+
+    /// Path from the player's current cell to the exit, via BFS
+    /// through the maze's open corridors. Used by the Solve
+    /// toggle in the walk view to show "from where you are".
+    func solutionFromHere() -> [Coord] {
+        let exit = Coord(x: exitCellX, y: exitCellZ)
+        return bfs(from: currentCell, to: exit)
+    }
+
     /// Walk to `target`, navigating along the maze's open
     /// corridors via BFS. The path is queued on `pathQueue` and
     /// each completed step lerp pulls the next cell off
@@ -608,11 +632,12 @@ struct Maze3DView: View {
                z: mazeH - cellSize / 2,
                color: .systemGreen)
 
-        // Solution path -- always built, hidden until the user
-        // toggles it on. Built up front so the toggle is instant.
+        // Solution path container -- empty at start; the Solve
+        // toggle rebuilds the children from the player's CURRENT
+        // cell each time it's switched on, so "show me the way
+        // out" always means "from here".
         solutionEntity.name = "solution"
-        solutionEntity.isEnabled = showingSolution
-        buildSolutionPath(into: solutionEntity)
+        solutionEntity.isEnabled = false
         content.add(solutionEntity)
 
         // sun -- warmer, brighter, casts soft shadows down the
@@ -796,13 +821,30 @@ struct Maze3DView: View {
         return .pi
     }
 
+    /// Tear down the existing solution-path children and rebuild
+    /// from the player's current cell. Called when the Solve
+    /// toggle flips on so the line always starts under the
+    /// player.
+    @MainActor
+    private func rebuildSolutionPath() {
+        guard let player else { return }
+        // Drop any previously-built segment entities.
+        for child in solutionEntity.children.map({ $0 }) {
+            child.removeFromParent()
+        }
+        let path = player.solutionFromHere()
+        buildSolutionPath(into: solutionEntity, path: path)
+    }
+
     /// Build the solution path as a chain of thin elongated boxes
     /// hovering just above the floor. Uses an unlit material so
     /// the line "glows" -- it ignores scene lighting and reads
-    /// brightly even in the shadowed corridors.
+    /// brightly even in the shadowed corridors. Caller supplies
+    /// the cell list so the overlay can show "from where you are
+    /// to the exit" instead of always starting at the entrance.
     @MainActor
-    private func buildSolutionPath(into root: Entity) {
-        guard let path = maze.solution, path.count >= 2 else { return }
+    private func buildSolutionPath(into root: Entity, path: [Coord]) {
+        guard path.count >= 2 else { return }
         let mat = UnlitMaterial(color: .cyan)
         let lineWidth: Float = 0.10
         let lineY    : Float = 0.04
@@ -1136,10 +1178,15 @@ struct Maze3DView: View {
     private let flyStep: Float = 2.5
 
     /// Top-right toggle that shows / hides the solution-path
-    /// overlay. Tint cyan when active to mirror the line color.
+    /// overlay. On every switch-on the path is rebuilt from the
+    /// player's CURRENT cell to the exit (BFS), so "show the way
+    /// out" tracks the player as they explore.
     private var solveToggle: some View {
         Button {
             showingSolution.toggle()
+            if showingSolution {
+                rebuildSolutionPath()
+            }
             solutionEntity.isEnabled = showingSolution
         } label: {
             Image(systemName: "scope")
