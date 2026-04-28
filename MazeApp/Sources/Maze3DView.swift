@@ -119,9 +119,22 @@ private final class PlayerState {
     /// the nearest cardinal direction so movement always lands on
     /// a clean grid cell, regardless of how the camera is rotated.
     /// Blocked moves (walls in the way) silently no-op.
+    ///
+    /// If a previous step's lerp is still in progress, we snap to
+    /// the in-flight target FIRST so the new step is a clean
+    /// cell-center-to-cell-center jump regardless of how fast the
+    /// user taps.
     func step(forward: Int, strafe: Int) {
         guard !won else { return }
         guard !isFlying else { return }
+
+        // Snap to the in-flight target if we're mid-lerp -- guarantees
+        // every step starts from a cell center.
+        if let target = stepTarget {
+            position.x = target.x
+            position.z = target.y
+            stepTarget = nil
+        }
 
         // Snap yaw to nearest cardinal multiple of π/2.
         let snapped = round(yaw / (.pi / 2)) * (.pi / 2)
