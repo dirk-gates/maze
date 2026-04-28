@@ -89,6 +89,11 @@ private final class PlayerState {
     /// the next cell off the queue and starts a new step. Single
     /// D-pad taps clear this queue; tap-to-walk replaces it.
     private var pathQueue: [Coord] = []
+    /// The cell we last popped (or the walkTo start cell, before
+    /// any pops). Used inside advanceQueue() to compute the
+    /// direction of travel for yaw-snap WITHOUT relying on the
+    /// in-tick `position` or `currentCell` snapshot timing.
+    private var lastQueueCell: Coord?
 
     // ----- VR look (CoreMotion) -----
     /// True while the device-motion stream is driving yaw + pitch.
@@ -205,8 +210,10 @@ private final class PlayerState {
         guard !isFlying else { return }
 
         // Cancel any auto-walk path -- this is a manual one-cell
-        // step.
+        // step. Reset the auto-walk's previous-cell tracker too
+        // so the next walkTo starts fresh.
         pathQueue.removeAll()
+        lastQueueCell = nil
 
         // Snap to the in-flight target if we're mid-lerp -- guarantees
         // every step starts from a cell center.
@@ -382,13 +389,38 @@ private final class PlayerState {
         // BFS returns the full list including the start; we want
         // only the steps from "next cell" onward.
         pathQueue = Array(path.dropFirst())
+        // Seed lastQueueCell with the start cell so advanceQueue
+        // can compute the direction of the FIRST step as
+        // (next - here). Subsequent advances update it themselves.
+        lastQueueCell = here
         advanceQueue()
     }
 
-    /// Pull the next cell off `pathQueue` and start the lerp.
+    /// Pull the next cell off `pathQueue`, snap yaw to face the
+    /// direction of travel (next − lastQueueCell), then start the
+    /// lerp. lastQueueCell is initialized by walkTo() with the
+    /// player's starting cell, then updated on every pop -- so we
+    /// never have to ask "where is the player right now?" mid-tick.
     private func advanceQueue() {
         guard !pathQueue.isEmpty else { return }
         let next = pathQueue.removeFirst()
+
+        if let prev = lastQueueCell {
+            let dx = next.x - prev.x
+            let dz = next.y - prev.y
+            if dx != 0 || dz != 0 {
+                // forward = (-sin(yaw), 0, -cos(yaw)) so to face
+                // (dx, 0, dz): yaw = atan2(-dx, -dz).
+                let newYaw = atan2(Float(-dx), Float(-dz))
+                yaw = newYaw
+                if vrEnabled {
+                    vrBaseYaw     = newYaw
+                    vrRefAttitude = nil
+                }
+            }
+        }
+        lastQueueCell = next
+
         let tx = (Float(next.x) + 0.5) * cellSize
         let tz = (Float(next.y) + 0.5) * cellSize
         stepTarget = SIMD2(tx, tz)
