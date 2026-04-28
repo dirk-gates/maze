@@ -388,9 +388,29 @@ private final class PlayerState {
     }
 
     /// Pull the next cell off `pathQueue` and start the lerp.
+    /// Also snaps the camera yaw to face the direction of travel
+    /// so auto-walk reads as "the player is looking ahead while
+    /// they navigate." If VR is on, we also recapture the gyro
+    /// reference so subsequent motion deltas continue from the
+    /// new heading instead of rotating us back.
     private func advanceQueue() {
         guard !pathQueue.isEmpty else { return }
+        let here = currentCell
         let next = pathQueue.removeFirst()
+
+        let dx = next.x - here.x
+        let dz = next.y - here.y
+        if dx != 0 || dz != 0 {
+            // forward = (-sin(yaw), 0, -cos(yaw)) so to face dx,dz:
+            //   yaw = atan2(-dx, -dz)
+            let newYaw = atan2(Float(-dx), Float(-dz))
+            yaw = newYaw
+            if vrEnabled {
+                vrBaseYaw    = newYaw
+                vrRefAttitude = nil
+            }
+        }
+
         let tx = (Float(next.x) + 0.5) * cellSize
         let tz = (Float(next.y) + 0.5) * cellSize
         stepTarget = SIMD2(tx, tz)
