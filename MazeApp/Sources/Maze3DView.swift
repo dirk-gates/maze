@@ -98,7 +98,13 @@ private final class PlayerState {
         self.exitCellX    = exitCellX
         self.exitCellZ    = exitCellZ
         self.maxAltitude  = maxAltitude
-        self.flyClearance = wallHeight - eyeHeight + 0.1
+        // Clamp to a sensible minimum: with waist-high hedges
+        // (0.95 m) and eye at 1.55 m, the bare formula goes
+        // negative, which makes `isFlying` true at ground level
+        // and disables horizontal movement. The clamp keeps the
+        // walking → flying transition at ~0.3 m of altitude in
+        // every hedge mode.
+        self.flyClearance = max(0.3, wallHeight - eyeHeight + 0.1)
     }
 
     func applyLookDelta(_ delta: CGSize) {
