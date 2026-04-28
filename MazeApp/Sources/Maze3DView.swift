@@ -77,15 +77,21 @@ private final class PlayerState {
     private let walls       : [WallAABB]
     private let width       : Int
     private let height      : Int
+    private let maze        : Maze   // for BFS pathfinding when tap-to-walking
     private let exitCellX   : Int
     private let exitCellZ   : Int
     private let playerRadius: Float = 0.22
     private let stepSpeed   : Float = 3.5   // cells per second during a step lerp
     private let altitudeRate: Float = 4.0   // 1/seconds: ~0.25 s to converge
 
+    /// Cells queued by walkTo(_:). Each completed step lerp pulls
+    /// the next cell off the queue and starts a new step. Single
+    /// D-pad taps clear this queue; tap-to-walk replaces it.
+    private var pathQueue: [Coord] = []
+
     init(start: SIMD3<Float>, yaw: Float,
          walls: [WallAABB],
-         width: Int, height: Int,
+         maze : Maze,
          exitCellX: Int, exitCellZ: Int,
          maxAltitude: Float,
          wallHeight: Float)
@@ -93,8 +99,9 @@ private final class PlayerState {
         self.position     = start
         self.yaw          = yaw
         self.walls        = walls
-        self.width        = width
-        self.height       = height
+        self.width        = maze.width
+        self.height       = maze.height
+        self.maze         = maze
         self.exitCellX    = exitCellX
         self.exitCellZ    = exitCellZ
         self.maxAltitude  = maxAltitude
@@ -123,10 +130,15 @@ private final class PlayerState {
     /// If a previous step's lerp is still in progress, we snap to
     /// the in-flight target FIRST so the new step is a clean
     /// cell-center-to-cell-center jump regardless of how fast the
-    /// user taps.
+    /// user taps. A queued tap-to-walk path is also cancelled --
+    /// manual D-pad input always wins.
     func step(forward: Int, strafe: Int) {
         guard !won else { return }
         guard !isFlying else { return }
+
+        // Cancel any auto-walk path -- this is a manual one-cell
+        // step.
+        pathQueue.removeAll()
 
         // Snap to the in-flight target if we're mid-lerp -- guarantees
         // every step starts from a cell center.
@@ -199,8 +211,8 @@ private final class PlayerState {
 
         // Step-target lerp: pull (x, z) toward the most recent
         // step destination, if any. Each lerp lands on a cell
-        // center; tapping again mid-lerp replaces the target so
-        // chained taps flow continuously.
+        // center. When it finishes, advance the auto-walk queue
+        // so chained tap-to-walk steps flow into each other.
         if !isFlying, let target = stepTarget {
             let dx = target.x - p.x
             let dz = target.y - p.z
@@ -210,6 +222,11 @@ private final class PlayerState {
                 p.x = target.x
                 p.z = target.y
                 stepTarget = nil
+                // Mutating self while we're using `var p = position`
+                // is fine -- we'll commit p at the end of tick().
+                // Pull the next path cell off the queue (if any)
+                // so auto-walk continues.
+                advanceQueue()
             } else {
                 let scale = stepDist / dist
                 p.x += dx * scale
@@ -241,6 +258,92 @@ private final class PlayerState {
                 won = true
             }
         }
+    }
+
+    /// Walk to `target`, navigating along the maze's open
+    /// corridors via BFS. The path is queued on `pathQueue` and
+    /// each completed step lerp pulls the next cell off
+    /// automatically (see tick()). Cancelled by any subsequent
+    /// step() (D-pad) call.
+    func walkTo(_ target: Coord) {
+        guard !won else { return }
+        guard !isFlying else { return }
+
+        // Snap to the in-flight target so we BFS from a clean
+        // cell center.
+        if let stp = stepTarget {
+            position.x = stp.x
+            position.z = stp.y
+            stepTarget = nil
+        }
+
+        let cx = Int(floor(position.x / cellSize))
+        let cz = Int(floor(position.z / cellSize))
+        let here = Coord(x: cx, y: cz)
+        guard target != here else {
+            pathQueue.removeAll()
+            return
+        }
+        guard target.x >= 0, target.x < width,
+              target.y >= 0, target.y < height
+        else { return }
+
+        let path = bfs(from: here, to: target)
+        // BFS returns the full list including the start; we want
+        // only the steps from "next cell" onward.
+        pathQueue = Array(path.dropFirst())
+        advanceQueue()
+    }
+
+    /// Pull the next cell off `pathQueue` and start the lerp.
+    private func advanceQueue() {
+        guard !pathQueue.isEmpty else { return }
+        let next = pathQueue.removeFirst()
+        let tx = (Float(next.x) + 0.5) * cellSize
+        let tz = (Float(next.y) + 0.5) * cellSize
+        stepTarget = SIMD2(tx, tz)
+    }
+
+    /// Standard BFS through the maze graph. Edges = cell pairs
+    /// with no wall between. Returns [] if no path (shouldn't
+    /// happen in a connected maze), otherwise a list starting
+    /// with `start` and ending with `goal`.
+    private func bfs(from start: Coord, to goal: Coord) -> [Coord] {
+        if start == goal { return [start] }
+        var visited: Set<Coord> = [start]
+        var parent : [Coord: Coord] = [:]
+        var queue  : [Coord] = [start]
+        var head   = 0
+        while head < queue.count {
+            let here = queue[head]
+            head += 1
+            if here == goal {
+                var path: [Coord] = [goal]
+                var cur = goal
+                while let p = parent[cur] {
+                    path.insert(p, at: 0)
+                    cur = p
+                }
+                return path
+            }
+            let neighbours = [
+                Coord(x: here.x + 1, y: here.y),
+                Coord(x: here.x - 1, y: here.y),
+                Coord(x: here.x,     y: here.y + 1),
+                Coord(x: here.x,     y: here.y - 1),
+            ]
+            for n in neighbours {
+                guard n.x >= 0, n.x < maze.width,
+                      n.y >= 0, n.y < maze.height
+                else { continue }
+                if visited.contains(n) { continue }
+                if maze.wall(between: here, n) { continue }
+                visited.insert(n)
+                parent[n] = here
+                queue.append(n)
+            }
+        }
+        return []
     }
 
     private func collides(at p: SIMD3<Float>) -> Bool {
@@ -372,6 +475,11 @@ struct Maze3DView: View {
     /// successive callbacks is the actual finger motion since
     /// last frame.
     @State private var lookAnchor: CGSize = .zero
+
+    /// True once the current touch has moved more than the tap
+    /// threshold -- distinguishes a tap (no movement) from a
+    /// drag-to-look. Cleared in onEnded.
+    @State private var dragMoved: Bool = false
 
     private func applyLook(translation: CGSize) {
         let delta = CGSize(
@@ -560,8 +668,7 @@ struct Maze3DView: View {
             start      : SIMD3(startX, eyeHeight, startZ),
             yaw        : startYaw,
             walls      : aabbs,
-            width      : maze.width,
-            height     : maze.height,
+            maze       : maze,
             exitCellX  : maze.exit.x,
             exitCellZ  : maze.height - 1,
             maxAltitude: maxAlt,
@@ -1051,27 +1158,84 @@ struct Maze3DView: View {
 
     #if os(iOS)
     /// Full-screen transparent layer that captures drag gestures
-    /// for camera rotation. PUBG / Call of Duty pattern -- thumb
-    /// can land anywhere and dragging rotates the view. Sits
-    /// underneath the joystick + buttons in the ZStack so taps on
-    /// those reach them first.
+    /// for camera rotation AND tap gestures for tap-to-walk. The
+    /// gesture distinguishes via translation magnitude: anything
+    /// under the tap threshold ends as a tap (handleTap); anything
+    /// over starts a look-rotation that ignores the lift.
     private var lookSurface: some View {
-        Color.clear
-            .contentShape(Rectangle())
-            .gesture(
-                DragGesture(minimumDistance: 0)
-                    .onChanged { value in
-                        // Use the per-frame translation delta, not
-                        // the cumulative one -- otherwise far drags
-                        // accelerate the rotation. SwiftUI gives us
-                        // cumulative `translation`, so we keep a
-                        // running anchor.
-                        applyLook(translation: value.translation)
-                    }
-                    .onEnded { _ in
-                        lookAnchor = .zero
-                    }
-            )
+        GeometryReader { geo in
+            Color.clear
+                .contentShape(Rectangle())
+                .gesture(
+                    DragGesture(minimumDistance: 0)
+                        .onChanged { value in
+                            if !dragMoved {
+                                let dx = value.translation.width
+                                let dy = value.translation.height
+                                if abs(dx) > 8 || abs(dy) > 8 {
+                                    dragMoved = true
+                                    // Reset anchor so the first
+                                    // applyLook delta is small.
+                                    lookAnchor = value.translation
+                                }
+                            }
+                            if dragMoved {
+                                applyLook(translation: value.translation)
+                            }
+                        }
+                        .onEnded { value in
+                            if !dragMoved {
+                                handleTap(at: value.location,
+                                          viewSize: geo.size)
+                            }
+                            dragMoved  = false
+                            lookAnchor = .zero
+                        }
+                )
+        }
+    }
+
+    /// Convert a screen-space tap into a maze cell and ask the
+    /// player to walk there. Builds a ray from the camera through
+    /// the tap point, intersects with the floor (y=0) plane, and
+    /// floors the world XZ to find the cell.
+    private func handleTap(at screenPoint: CGPoint, viewSize: CGSize) {
+        guard let player else { return }
+        guard !enteringScene else { return }
+        guard !player.isFlying else { return }
+        guard viewSize.width > 0, viewSize.height > 0 else { return }
+
+        let xNDC =  Float(screenPoint.x / viewSize.width)  * 2 - 1
+        let yNDC = -(Float(screenPoint.y / viewSize.height) * 2 - 1)
+
+        // Camera vertical FOV is 90° → tan(half) = 1.
+        let tanFovV = Float(1.0)
+        let aspect  = Float(viewSize.width / viewSize.height)
+        let tanFovH = tanFovV * aspect
+
+        // Ray direction in camera local space (camera looks -Z).
+        let dirLocal = simd_normalize(SIMD3<Float>(
+            xNDC * tanFovH,
+            yNDC * tanFovV,
+            -1
+        ))
+        let dirWorld = cameraEntity.orientation.act(dirLocal)
+        let origin   = cameraEntity.position
+
+        // Floor at y=0 → t = -origin.y / dir.y. Need ray going
+        // downward (dir.y < 0) for an intersection at or below.
+        guard dirWorld.y < -1e-4 else { return }
+        let t = -origin.y / dirWorld.y
+        guard t > 0 else { return }
+        let hit = origin + dirWorld * t
+
+        let cx = Int(floor(hit.x / cellSize))
+        let cz = Int(floor(hit.z / cellSize))
+        guard cx >= 0, cx < maze.width,
+              cz >= 0, cz < maze.height
+        else { return }
+
+        player.walkTo(Coord(x: cx, y: cz))
     }
 
     /// Bottom-left D-pad: 4 cardinal step buttons. Each tap moves
