@@ -157,8 +157,22 @@ private final class PlayerState {
     /// Apply one CoreMotion sample to the player's view. The
     /// device attitude is multiplied by the inverse of the
     /// reference attitude so we get rotation relative to "the
-    /// pose the phone was in when VR was enabled". Yaw goes to
-    /// camera yaw; pitch goes to camera pitch (clamped).
+    /// pose the phone was in when VR was enabled".
+    ///
+    /// Axis mapping for a portrait-held phone:
+    ///   - The device's Y axis points up the long edge, which
+    ///     ALIGNS with world vertical. Rotating the user (and
+    ///     the phone with them) around world vertical is therefore
+    ///     a rotation around device Y -- which CMAttitude
+    ///     represents as ROLL.
+    ///   - Tilting the top of the phone forward/back is a
+    ///     rotation around device X (the short edge), which is
+    ///     CMAttitude PITCH.
+    /// So:  camera yaw   ← attitude.roll
+    ///      camera pitch ← attitude.pitch
+    /// Earlier swap (yaw ← yaw, pitch ← roll) made body rotation
+    /// drive camera pitch -- exactly the "ends up staring at the
+    /// sky / ground" symptom.
     func applyMotion(_ motion: CMDeviceMotion) {
         guard vrEnabled else { return }
         let attitude = motion.attitude.copy() as! CMAttitude
@@ -169,21 +183,8 @@ private final class PlayerState {
         if let ref = vrRefAttitude {
             attitude.multiply(byInverseOf: ref)
         }
-        // CoreMotion uses East-up-North-ish frames depending on
-        // settings; for a portrait-held phone the yaw axis is
-        // vertical (rotating phone left/right around its long
-        // axis... wait no, that's roll). For portrait the most
-        // natural mapping is:
-        //   user turns body left  → phone yaws CCW (negative)
-        //                         → camera should yaw CCW (negative)
-        //   user tips phone down  → phone pitches negative
-        //                         → camera pitch negative (look down)
-        // The rotation around the camera's local X (camera pitch)
-        // matches the device's "roll" when phone is portrait,
-        // since the device's pitch axis runs across the screen
-        // horizontally. Swap pitch ← attitude.roll.
-        let dyaw   = Float(attitude.yaw)
-        let dpitch = Float(attitude.roll)
+        let dyaw   = Float(attitude.roll)
+        let dpitch = Float(attitude.pitch)
         yaw   = vrBaseYaw   + dyaw
         pitch = max(-1.4, min(1.4, vrBasePitch + dpitch))
     }
