@@ -178,80 +178,107 @@ struct MazeCanvasView: View {
                     angle = atan2(dy, dx)
                 }
             }
-            drawLawnmower(
+            drawHedgehog(
                 context: context,
                 center : CGPoint(x: r.midX, y: r.midY),
                 angle  : angle,
-                cs     : cs
+                cs     : cs,
+                now    : now
             )
         }
     }
 
-    /// Old-school reel push mower from the top: a stubby cylinder
-    /// at the front (perpendicular to the direction of motion) +
-    /// a single straight handle going back to a small grip. No
-    /// wheels, no deck, no operator -- the whole icon is just the
-    /// reel and the handle, rotated to point along the carve
-    /// direction.
-    private func drawLawnmower(context: GraphicsContext,
-                               center : CGPoint,
-                               angle  : CGFloat,
-                               cs     : CGFloat)
+    /// Top-down hedgehog head chomping its way through the hedge,
+    /// Pac-Man style: round body, quills fanning around the back
+    /// half, and a wedge mouth at the front that opens and closes
+    /// at ~3.5 Hz to "eat" through the maze. Same role as the old
+    /// lawnmower icon -- reads as "the carve head is here, moving
+    /// in this direction".
+    private func drawHedgehog(context: GraphicsContext,
+                              center : CGPoint,
+                              angle  : CGFloat,
+                              cs     : CGFloat,
+                              now    : Date)
     {
-        let s = min(28.0, max(10.0, cs * 0.35))
+        let s = min(32.0, max(14.0, cs * 0.45))
 
         var ctx = context
         ctx.translateBy(x: center.x, y: center.y)
         ctx.rotate(by: .radians(angle))
-        // After rotation: +X is forward (cutting direction).
+        // After rotation: +X is forward (carving direction).
 
-        // ---- reel cylinder up front ----
-        // Wider in Y (perpendicular to motion) than X so it reads
-        // as the cutting drum even at small scales.
-        let reelDepth   = s * 0.42
-        let reelWidth   = s * 1.20
-        let reelCenterX = s * 0.55
-        let reelRect = CGRect(
-            x     : reelCenterX - reelDepth / 2,
-            y     : -reelWidth / 2,
-            width : reelDepth,
-            height: reelWidth
-        )
-        let red   = Color(red: 0.78, green: 0.20, blue: 0.20)
-        let outline = Color.black.opacity(0.65)
+        // Chomp animation. cos so phase=0 starts mouth fully open;
+        // ~3.5 Hz feels lively without being frantic. Floor the
+        // half-angle slightly above zero so even a "closed" mouth
+        // shows a thin slit -- reads as a face, not a featureless
+        // ball.
+        let t = now.timeIntervalSinceReferenceDate
+        let cycle = (cos(t * 2 * .pi * 3.5) + 1) / 2          // 0..1
+        let mouthHalf: CGFloat = 0.04 + CGFloat(cycle) * 0.55  // ~2°..34°
+
+        let body  = Color(red: 0.62, green: 0.45, blue: 0.27)  // warm tan
+        let quill = Color(red: 0.32, green: 0.20, blue: 0.10)  // dark brown
+        let mouth = Color(red: 0.30, green: 0.10, blue: 0.10)  // dark red-brown
+
+        // ---- quills: short triangles fanning across the back
+        //      hemisphere, from upper-back through rear to lower-
+        //      back. Each is a thin isoceles triangle pointing
+        //      radially outward. Drawn first so the body covers
+        //      their bases.
+        let quillCount    = 13
+        let quillStartA   : CGFloat = .pi * 0.40   // upper back, behind eye
+        let quillEndA     : CGFloat = .pi * 1.60   // lower back
+        let quillBaseR    = s * 0.62
+        let quillTipR     = s * 1.05
+        for i in 0..<quillCount {
+            let frac  = CGFloat(i) / CGFloat(quillCount - 1)
+            let theta = quillStartA + frac * (quillEndA - quillStartA)
+            let dir   = CGPoint(x: cos(theta),  y: sin(theta))
+            let perp  = CGPoint(x: -dir.y,      y: dir.x)
+            let halfW = s * 0.045
+            var path = Path()
+            path.move(to: CGPoint(
+                x: quillBaseR * dir.x + halfW * perp.x,
+                y: quillBaseR * dir.y + halfW * perp.y))
+            path.addLine(to: CGPoint(
+                x: quillTipR * dir.x,
+                y: quillTipR * dir.y))
+            path.addLine(to: CGPoint(
+                x: quillBaseR * dir.x - halfW * perp.x,
+                y: quillBaseR * dir.y - halfW * perp.y))
+            path.closeSubpath()
+            ctx.fill(path, with: .color(quill))
+        }
+
+        // ---- body: full circle ----
+        let bodyR = s * 0.7
         ctx.fill(
-            Path(roundedRect: reelRect, cornerRadius: reelDepth / 2),
-            with: .color(red)
-        )
-        ctx.stroke(
-            Path(roundedRect: reelRect, cornerRadius: reelDepth / 2),
-            with: .color(outline),
-            lineWidth: s * 0.07
-        )
+            Path(ellipseIn: CGRect(
+                x: -bodyR, y: -bodyR,
+                width: bodyR * 2, height: bodyR * 2)),
+            with: .color(body))
 
-        // ---- handle: from the back of the reel, going back ----
-        let brown = Color(red: 0.32, green: 0.21, blue: 0.12)
-        let lineW = s * 0.18
-        let handleStartX = reelCenterX - reelDepth / 2
-        let handleEndX   = -s * 1.20
-        var handle = Path()
-        handle.move(to: CGPoint(x: handleStartX, y: 0))
-        handle.addLine(to: CGPoint(x: handleEndX, y: 0))
-        ctx.stroke(
-            handle,
-            with: .color(brown),
-            style: StrokeStyle(lineWidth: lineW, lineCap: .round)
-        )
+        // ---- mouth wedge cut into the front of the body ----
+        // Pivots at body center, sweeps ±mouthHalf around forward.
+        // Filled in dark mouth color so the wedge reads as an
+        // open mouth instead of a hole through the head.
+        var mouthPath = Path()
+        mouthPath.move(to: .zero)
+        mouthPath.addArc(
+            center    : .zero,
+            radius    : bodyR + 0.5,                 // +0.5 to fully cover edge
+            startAngle: .radians(-mouthHalf),
+            endAngle  : .radians( mouthHalf),
+            clockwise : false)
+        mouthPath.closeSubpath()
+        ctx.fill(mouthPath, with: .color(mouth))
 
-        // Small perpendicular grip at the end so the handle reads
-        // as something a person grabs, not a stick.
-        var grip = Path()
-        grip.move(to: CGPoint(x: handleEndX, y: -s * 0.35))
-        grip.addLine(to: CGPoint(x: handleEndX, y:  s * 0.35))
-        ctx.stroke(
-            grip,
-            with: .color(brown),
-            style: StrokeStyle(lineWidth: lineW, lineCap: .round)
-        )
+        // ---- eye: small black dot, forward + above center ----
+        let eyeR = s * 0.085
+        ctx.fill(
+            Path(ellipseIn: CGRect(
+                x: s * 0.20 - eyeR, y: -s * 0.30 - eyeR,
+                width: eyeR * 2, height: eyeR * 2)),
+            with: .color(.black))
     }
 }
