@@ -69,10 +69,10 @@ final class MazeViewModel {
     // ----- configuration (Settings will mutate these later) -----
     var width         : Int     = 30
     var height        : Int     = 20
-    var lookAheadDepth: Int     = 0
+    var lookAheadDepth: Int     = 10
     var animationSpeed: Double  = 0.65   // 0 = slow, 1 = instant
     var appearance    : AppearancePreference = .system
-    var hedgeHeight   : HedgeHeight          = .tall
+    var hedgeHeight   : HedgeHeight          = .waist
 
     /// Seed actually used by the most recent / current generation.
     /// Captured so we can persist it to the library and replay later.

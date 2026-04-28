@@ -75,7 +75,7 @@ struct SettingsView: View {
                     }
                 }
                 Section {
-                    Stepper(value: $lookAheadDepth, in: 0...10) {
+                    Stepper(value: $lookAheadDepth, in: 0...20) {
                         LabeledContent("Look-ahead depth",
                                        value: lookAheadDepth == 0 ? "off"
                                                                   : "\(lookAheadDepth)")
