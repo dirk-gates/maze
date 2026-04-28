@@ -573,16 +573,23 @@ struct Maze3DView: View {
             translation: p.position
         )
 
+        // 1-second hold on the overhead view before the descent
+        // begins -- gives the eye a beat to take in the full
+        // bird's-eye layout before things start moving.
+        let openingHold   : TimeInterval = 1.0
         let descendDuration: TimeInterval = 3.0
         let pitchDuration  : TimeInterval = 0.6
 
-        cameraEntity.move(
-            to            : descendTransform,
-            relativeTo    : nil,
-            duration      : descendDuration,
-            timingFunction: .easeInOut
-        )
         Task { @MainActor in
+            try? await Task.sleep(
+                nanoseconds: UInt64(openingHold * 1_000_000_000)
+            )
+            self.cameraEntity.move(
+                to            : descendTransform,
+                relativeTo    : nil,
+                duration      : descendDuration,
+                timingFunction: .easeInOut
+            )
             try? await Task.sleep(
                 nanoseconds: UInt64(descendDuration * 1_000_000_000)
             )
