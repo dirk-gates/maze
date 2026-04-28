@@ -1304,29 +1304,54 @@ struct Maze3DView: View {
     }
 
     /// Top-right toggle that shows / hides the solution-path
-    /// overlay. On every switch-on the path is rebuilt from the
-    /// player's CURRENT cell to the exit (BFS), so "show the way
-    /// out" tracks the player as they explore.
+    /// overlay. Single tap toggles. Double tap also auto-walks
+    /// you to the exit (same as tapping the exit cell), with the
+    /// trail visible the whole way.
     private var solveToggle: some View {
-        Button {
-            showingSolution.toggle()
-            if showingSolution {
-                rebuildSolutionPath()
-            }
-            solutionEntity.isEnabled = showingSolution
-        } label: {
-            Image(systemName: "scope")
-                .font(.largeTitle)
-                .padding(10)
-                .background(
-                    Circle().fill(.black.opacity(0.55))
-                )
-                .foregroundStyle(showingSolution ? .cyan : .white)
-                .padding()
+        Image(systemName: "scope")
+            .font(.largeTitle)
+            .padding(10)
+            .background(Circle().fill(.black.opacity(0.55)))
+            .foregroundStyle(showingSolution ? .cyan : .white)
+            .padding()
+            .contentShape(Rectangle())
+            // Double tap MUST be declared before single tap so
+            // SwiftUI defers the single-tap fire long enough to
+            // disambiguate them.
+            .onTapGesture(count: 2) { autoWalkHome() }
+            .onTapGesture(count: 1) { toggleSolveOverlay() }
+            .accessibilityLabel(showingSolution
+                                ? "Hide solution path"
+                                : "Show solution path")
+            .accessibilityHint("Double-tap to walk home automatically.")
+    }
+
+    private func toggleSolveOverlay() {
+        showingSolution.toggle()
+        if showingSolution {
+            rebuildSolutionPath()
         }
-        .accessibilityLabel(showingSolution
-                            ? "Hide solution path"
-                            : "Show solution path")
+        solutionEntity.isEnabled = showingSolution
+    }
+
+    /// Show the solve trail and BFS-walk the player to the exit.
+    /// Equivalent to tapping the exit cell. Cancellable with the
+    /// D-pad (manual step clears the auto-walk queue).
+    private func autoWalkHome() {
+        guard let player else { return }
+        guard !enteringScene else { return }
+        guard !player.isFlying else { return }
+
+        // Make sure the trail is visible -- "show + walk" feels
+        // off if the path doesn't appear.
+        if !showingSolution {
+            showingSolution = true
+        }
+        rebuildSolutionPath()
+        solutionEntity.isEnabled = true
+
+        let exitCell = Coord(x: maze.exit.x, y: maze.height - 1)
+        player.walkTo(exitCell)
     }
 
     #if os(iOS)
