@@ -290,11 +290,13 @@ private final class PlayerState {
                 p.x = target.x
                 p.z = target.y
                 stepTarget = nil
-                // Mutating self while we're using `var p = position`
-                // is fine -- we'll commit p at the end of tick().
                 // Pull the next path cell off the queue (if any)
-                // so auto-walk continues.
-                advanceQueue()
+                // so auto-walk continues. Pass the just-landed
+                // XZ explicitly -- `position` (the @Observable
+                // property) won't be written until the bottom of
+                // tick(), so currentCell would still see the
+                // PREVIOUS cell here.
+                advanceQueue(from: SIMD2(p.x, p.z))
             } else {
                 let scale = stepDist / dist
                 p.x += dx * scale
@@ -388,14 +390,29 @@ private final class PlayerState {
     }
 
     /// Pull the next cell off `pathQueue` and start the lerp.
-    /// Also snaps the camera yaw to face the direction of travel
-    /// so auto-walk reads as "the player is looking ahead while
-    /// they navigate." If VR is on, we also recapture the gyro
-    /// reference so subsequent motion deltas continue from the
-    /// new heading instead of rotating us back.
-    private func advanceQueue() {
+    /// `from` is the player's actual current cell-center position
+    /// (in world XZ); pass it from tick() right after landing on
+    /// the previous step so we don't rely on the stale `position`
+    /// property (which is committed at the bottom of tick()).
+    /// When called from walkTo() with no arg, currentCell is used
+    /// because position is up-to-date there.
+    ///
+    /// Snaps yaw to face (next - here) so auto-walk looks ahead
+    /// in the direction of travel. VR mode rebaselines its gyro
+    /// reference so subsequent motion deltas apply on top of the
+    /// new heading.
+    private func advanceQueue(from: SIMD2<Float>? = nil) {
         guard !pathQueue.isEmpty else { return }
-        let here = currentCell
+
+        let here: Coord
+        if let p = from {
+            here = Coord(
+                x: Int(floor(p.x / cellSize)),
+                y: Int(floor(p.y / cellSize))
+            )
+        } else {
+            here = currentCell
+        }
         let next = pathQueue.removeFirst()
 
         let dx = next.x - here.x
