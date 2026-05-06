@@ -777,6 +777,29 @@ struct Maze3DView: View {
         let mazeH = Float(maze.height) * cellSize
         let span  = max(mazeW, mazeH)
 
+        // lawn -- a large grass plane that extends well beyond the
+        // maze perimeter so the maze no longer reads as floating in
+        // the sky. Sits 1 cm below the stone floor so the floor's
+        // edges don't z-fight the lawn at the maze boundary. Size
+        // is generous (5x the longer maze axis) -- at full hedge
+        // height the player can't see the edge anyway, and at
+        // waist hedges the lawn extends out far enough to look
+        // continuous up to the horizon for the sky-dome to take
+        // over.
+        let lawnSpan = max(span * 5.0, 200)
+        let lawn = ModelEntity(
+            mesh: .generatePlane(width: lawnSpan, depth: lawnSpan),
+            materials: [lawnMaterial(repeats: lawnSpan / 4)]
+        )
+        lawn.position = SIMD3(mazeW / 2, -0.02, mazeH / 2)
+        content.add(lawn)
+
+        // Decorate the lawn with scattered trees and flowers --
+        // deterministic placement seeded from the maze size so a
+        // given maze has the same scenery every walk session.
+        addTrees  (content: content, mazeW: mazeW, mazeH: mazeH)
+        addFlowers(content: content, mazeW: mazeW, mazeH: mazeH)
+
         // floor -- sits 1 cm below y=0 so it doesn't share depth
         // with the wall side faces at their base. Co-occupied
         // depth at the bottom edge of every wall was causing a
@@ -1748,6 +1771,159 @@ struct Maze3DView: View {
                               roughness: 0.85, isMetallic: false)
     }
 
+    /// Lawn material -- the dense lush grass texture (Polyhaven /
+    /// ambientCG-style CC0) tiled across the perimeter ground
+    /// plane. `repeats` sets how many times the 2K source image
+    /// repeats over the plane's UV span; at ~4 m per tile the
+    /// individual grass clumps stay readable from eye level.
+    /// Falls back to a procedural grass-noise texture if the
+    /// "Grass" asset is missing.
+    @MainActor
+    private func lawnMaterial(repeats: Float) -> RealityKit.Material {
+        let tex = loadAssetTextureWithMipmaps("Grass")
+                 ?? generateGrassTexture()
+        if let tex {
+            var m = PhysicallyBasedMaterial()
+            m.baseColor = .init(texture: .init(tex))
+            m.roughness = .init(floatLiteral: 0.95)
+            m.metallic  = .init(floatLiteral: 0.00)
+            // Tile the texture across the lawn so individual grass
+            // clumps stay roughly life-sized instead of stretching
+            // to the full plane.
+            m.textureCoordinateTransform = .init(
+                offset  : .zero,
+                scale   : SIMD2<Float>(repeats, repeats),
+                rotation: 0
+            )
+            return m
+        }
+        return SimpleMaterial(color: .init(red: 0.30, green: 0.55, blue: 0.20, alpha: 1.0),
+                              roughness: 0.95, isMetallic: false)
+    }
+
+    /// Scatter chunky trees in a ring around the maze. Each tree
+    /// is a thin box trunk topped by two overlapping spheres
+    /// (lower large + upper smaller) for a fuller canopy. RealityKit
+    /// has no cylinder primitive, so the box trunk reads as cylindrical
+    /// at the ~5 m+ distances the player sees them from. Placement
+    /// is seeded from the maze dimensions so a given maze always
+    /// gets the same forest.
+    @MainActor
+    private func addTrees(
+        content: any RealityViewContentProtocol,
+        mazeW  : Float,
+        mazeH  : Float
+    ) {
+        var rng = SplitMix64(seed:
+            UInt64(maze.width * 31 + maze.height) &* 0x9E37_79B9_7F4A_7C15)
+
+        let trunkColor = SystemColor(red: 0.32, green: 0.22, blue: 0.12, alpha: 1.0)
+        let trunkMat   = SimpleMaterial(color: trunkColor,
+                                        roughness: 0.95, isMetallic: false)
+        let canopyTones: [SystemColor] = [
+            SystemColor(red: 0.18, green: 0.40, blue: 0.16, alpha: 1.0),
+            SystemColor(red: 0.22, green: 0.45, blue: 0.20, alpha: 1.0),
+            SystemColor(red: 0.30, green: 0.50, blue: 0.22, alpha: 1.0),
+            SystemColor(red: 0.16, green: 0.35, blue: 0.14, alpha: 1.0),
+        ]
+
+        let centerX    = mazeW / 2
+        let centerZ    = mazeH / 2
+        let mazeRadius = sqrt(mazeW * mazeW + mazeH * mazeH) / 2
+
+        let target   = 32
+        var placed   = 0
+        var attempts = 0
+        while placed < target && attempts < 400 {
+            attempts += 1
+            let angle = Float.random(in: 0..<(2 * .pi), using: &rng)
+            let dist  = Float.random(in: 4..<32, using: &rng)
+            let x = centerX + cos(angle) * (mazeRadius + dist)
+            let z = centerZ + sin(angle) * (mazeRadius + dist)
+            // Defensive: skip anything inside the maze rectangle
+            // (shouldn't happen given the radial offset, but keep
+            // the corridors clear no matter what).
+            if x > -1, x < mazeW + 1, z > -1, z < mazeH + 1 { continue }
+
+            let height       = Float.random(in: 3.5..<6.5,  using: &rng)
+            let trunkSide    = Float.random(in: 0.20..<0.35, using: &rng)
+            let canopyR      = Float.random(in: 1.4..<2.4,  using: &rng)
+            let canopyR2     = canopyR * Float.random(in: 0.6..<0.85, using: &rng)
+            let toneIdx      = Int.random(in: 0..<canopyTones.count, using: &rng)
+            let canopyMat    = SimpleMaterial(color: canopyTones[toneIdx],
+                                              roughness: 0.95, isMetallic: false)
+
+            let trunkMesh = MeshResource.generateBox(
+                size: SIMD3<Float>(trunkSide, height, trunkSide))
+            let trunk = ModelEntity(mesh: trunkMesh, materials: [trunkMat])
+            trunk.position = SIMD3(x, height / 2, z)
+            content.add(trunk)
+
+            let lowerMesh = MeshResource.generateSphere(radius: canopyR)
+            let lower     = ModelEntity(mesh: lowerMesh, materials: [canopyMat])
+            lower.position = SIMD3(x, height + canopyR * 0.4, z)
+            content.add(lower)
+
+            let upperMesh = MeshResource.generateSphere(radius: canopyR2)
+            let upper     = ModelEntity(mesh: upperMesh, materials: [canopyMat])
+            upper.position = SIMD3(x, height + canopyR * 0.95, z)
+            content.add(upper)
+
+            placed += 1
+        }
+    }
+
+    /// Scatter small bright spheres on the lawn near the maze --
+    /// reads as a wildflower meadow when seen from the player's
+    /// eye-level + tilt-down vantage. Five colour bands rotate so
+    /// individual flowers stay distinguishable. Stems are skipped:
+    /// at our scale they'd be thinner than a pixel.
+    @MainActor
+    private func addFlowers(
+        content: any RealityViewContentProtocol,
+        mazeW  : Float,
+        mazeH  : Float
+    ) {
+        var rng = SplitMix64(seed:
+            UInt64(maze.width * 17 + maze.height * 13) &* 0xBF58_476D_1CE4_E5B9)
+
+        let palette: [SystemColor] = [
+            SystemColor(red: 0.95, green: 0.20, blue: 0.20, alpha: 1.0),  // poppy
+            SystemColor(red: 1.00, green: 0.85, blue: 0.20, alpha: 1.0),  // buttercup
+            SystemColor(red: 0.96, green: 0.96, blue: 0.92, alpha: 1.0),  // daisy
+            SystemColor(red: 0.70, green: 0.30, blue: 0.85, alpha: 1.0),  // lupine
+            SystemColor(red: 0.96, green: 0.55, blue: 0.75, alpha: 1.0),  // pink
+        ]
+        let materials = palette.map {
+            SimpleMaterial(color: $0, roughness: 0.95, isMetallic: false)
+        }
+
+        let centerX    = mazeW / 2
+        let centerZ    = mazeH / 2
+        let mazeRadius = sqrt(mazeW * mazeW + mazeH * mazeH) / 2
+
+        let count    = 140
+        var placed   = 0
+        var attempts = 0
+        while placed < count && attempts < 800 {
+            attempts += 1
+            let angle = Float.random(in: 0..<(2 * .pi), using: &rng)
+            let dist  = Float.random(in: 0.5..<14, using: &rng)
+            let x = centerX + cos(angle) * (mazeRadius + dist)
+            let z = centerZ + sin(angle) * (mazeRadius + dist)
+            if x > -1, x < mazeW + 1, z > -1, z < mazeH + 1 { continue }
+
+            let r        = Float.random(in: 0.06..<0.12, using: &rng)
+            let matIdx   = Int.random(in: 0..<materials.count, using: &rng)
+            let mesh     = MeshResource.generateSphere(radius: r)
+            let flower   = ModelEntity(mesh: mesh, materials: [materials[matIdx]])
+            flower.position = SIMD3(x, 0.05 + r * 0.5, z)
+            content.add(flower)
+
+            placed += 1
+        }
+    }
+
     @MainActor
     private func floorMaterial() -> RealityKit.Material {
         let tex = loadAssetTextureWithMipmaps("Floor")
@@ -1983,6 +2159,50 @@ struct Maze3DView: View {
                 endCenter  : CGPoint(x: cx, y: cy), endRadius: CGFloat(radius),
                 options    : []
             )
+        }
+
+        guard let cg = ctx.makeImage() else { return nil }
+        return try? TextureResource(
+            image  : cg,
+            options: TextureResource.CreateOptions(semantic: .color, mipmapsMode: .allocateAndGenerateAll)
+        )
+    }
+
+    /// Lush green base with darker leaf-blade specks -- a quick
+    /// stand-in lawn used only when the "Grass" asset is missing.
+    /// Real apps ship the asset; this keeps preview / dev builds
+    /// from collapsing to a flat green plane.
+    @MainActor
+    private func generateGrassTexture(size: Int = 256) -> TextureResource? {
+        let cs = CGColorSpaceCreateDeviceRGB()
+        guard let ctx = CGContext(
+            data            : nil,
+            width           : size,
+            height          : size,
+            bitsPerComponent: 8,
+            bytesPerRow     : 0,
+            space           : cs,
+            bitmapInfo      : CGImageAlphaInfo.premultipliedLast.rawValue
+        ) else { return nil }
+
+        ctx.setFillColor(CGColor(red: 0.28, green: 0.50, blue: 0.20, alpha: 1.0))
+        ctx.fill(CGRect(x: 0, y: 0, width: size, height: size))
+
+        var rng = SystemRandomNumberGenerator()
+        for _ in 0..<3200 {
+            let x  = Double.random(in: 0..<Double(size), using: &rng)
+            let y  = Double.random(in: 0..<Double(size), using: &rng)
+            let r  = Double.random(in: 0.8..<2.6, using: &rng)
+            let dn = Double.random(in: -0.10..<0.10, using: &rng)
+            ctx.setFillColor(CGColor(
+                red  : 0.28 + dn,
+                green: 0.50 + dn,
+                blue : 0.20 + dn,
+                alpha: 1.0
+            ))
+            ctx.fillEllipse(in: CGRect(
+                x: x - r/2, y: y - r/2, width: r, height: r
+            ))
         }
 
         guard let cg = ctx.makeImage() else { return nil }

@@ -15,6 +15,7 @@
 // disallows that. The struct's static main() is the entry point.
 
 import CoreGraphics
+import CoreText
 import Foundation
 import ImageIO
 import MazeKit
@@ -178,6 +179,80 @@ struct IconGenerator {
         ctx.setFillColor(material)
         ctx.addPath(walls)
         ctx.fillPath(using: .evenOdd)
+
+        // ---- "Hedge & Seek" wordmark, stacked diagonal banner ----
+        // Two lines ("Hedge &" / "Seek"), both centered, rotated 45°
+        // so the stack reads from lower-left to upper-right across
+        // the maze. Cream fill with a dark stroke for legibility
+        // against both the green hedges and the black background it
+        // crosses, plus a soft drop shadow for depth. The maze
+        // context above is Y-flipped (UIKit-style); we counter-flip
+        // locally so CoreText draws upright.
+        let titleTop    = "Hedge"
+        let titleBottom = "& Seek"
+        let fontSize    = canvas * 0.17
+        let font        = CTFontCreateWithName(
+            "AvenirNext-Heavy" as CFString, fontSize, nil)
+        let fillColor   = CGColor(red: 1.00, green: 0.98, blue: 0.92, alpha: 1.0)
+        let strokeColor = CGColor(red: 0.04, green: 0.10, blue: 0.04, alpha: 1.0)
+        // Negative stroke width = stroke + fill in one pass.
+        let strokeW : CGFloat = -fontSize * 0.05
+
+        let attrs: [NSAttributedString.Key: Any] = [
+            .init(kCTFontAttributeName             as String): font,
+            .init(kCTForegroundColorAttributeName  as String): fillColor,
+            .init(kCTStrokeColorAttributeName      as String): strokeColor,
+            .init(kCTStrokeWidthAttributeName      as String): strokeW,
+        ]
+        let lineTop    = CTLineCreateWithAttributedString(
+            NSAttributedString(string: titleTop,    attributes: attrs))
+        let lineBottom = CTLineCreateWithAttributedString(
+            NSAttributedString(string: titleBottom, attributes: attrs))
+        let bTop    = CTLineGetBoundsWithOptions(lineTop,    .useOpticalBounds)
+        let bBottom = CTLineGetBoundsWithOptions(lineBottom, .useOpticalBounds)
+
+        // Baseline-to-baseline spacing. Wide enough that the two
+        // lines don't touch even with AvenirNext-Heavy's tall
+        // ascenders.
+        let lineGap = fontSize * 1.25
+
+        // Each baseline is positioned so the line's visual centre
+        // sits at the desired Y offset from the stack centre. The
+        // visual centre of a CT line, relative to its baseline, is
+        // (b.minY + b.height/2) -- so baseline = targetCentre minus
+        // that. After the counter-flip below, +Y user-space is
+        // visually-UP, so the first (top-of-stack) line takes the
+        // positive offset.
+        let baselineTopY    =  lineGap / 2 - bTop.minY    - bTop.height    / 2
+        let baselineBottomY = -lineGap / 2 - bBottom.minY - bBottom.height / 2
+
+        ctx.saveGState()
+        // Move origin to canvas center, counter-flip so text is
+        // upright, then rotate. In Quartz (Y-up) coords a positive
+        // rotation is counter-clockwise -- which after the y-flip
+        // reads as bottom-left → top-right diagonally. Drop shadow
+        // is applied first so it sits behind the glyph fill.
+        ctx.translateBy(x: canvas / 2, y: canvas / 2)
+        ctx.scaleBy(x: 1, y: -1)
+        // +π/4 in counter-flipped (Y-up) user-space gives a CCW rotation
+        // -- text reads on the rising diagonal (lower-left → upper-right).
+        ctx.rotate(by: .pi / 4)
+        ctx.setShadow(
+            offset: CGSize(width: 0, height: -fontSize * 0.06),
+            blur  : fontSize * 0.18,
+            color : CGColor(red: 0, green: 0, blue: 0, alpha: 0.85))
+
+        ctx.textPosition = CGPoint(
+            x: -bTop.width / 2 - bTop.minX,
+            y: baselineTopY)
+        CTLineDraw(lineTop, ctx)
+
+        ctx.textPosition = CGPoint(
+            x: -bBottom.width / 2 - bBottom.minX,
+            y: baselineBottomY)
+        CTLineDraw(lineBottom, ctx)
+
+        ctx.restoreGState()
 
         // ---- write ----
 
